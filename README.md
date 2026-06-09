@@ -145,6 +145,7 @@ Mouvements courants en une seule commande :
 | `0x0A` | SPIN_RIGHT | Rotation sur place (sens horaire) |
 | `0x0B` | PIVOT_RIGHT | Pivot autour du côté droit |
 | `0x0C` | PIVOT_REAR | Pivot autour de l'axe arrière |
+| `0x30` | JOYSTICK | Axes analogiques X/Y + vitesse max |
 
 ### Trame RAW mécanum (5 octets)
 
@@ -171,6 +172,23 @@ Tout mouvement mécanum possible en une seule trame :
 | `10` | Arrière |
 | `11` | Réservé (traité comme stop) |
 
+### Trame joystick analogique (8 octets)
+
+Pour piloter le rover avec un joystick analogique gauche type Xbox :
+
+```
+[0xAA] [0x30] [X_LO] [X_HI] [Y_LO] [Y_HI] [MAX_SPEED] [CHECKSUM]
+```
+
+- `X` / `Y` : `int16` little-endian, plage Xbox centrée `-32768..32767`
+- `X > 0` : déplacement vers la droite
+- `Y < 0` : déplacement vers l'avant (coordonnées écran / HID)
+- `MAX_SPEED` : vitesse PWM maximale `0..255`
+- `CHECKSUM` = somme des 7 premiers octets `& 0xFF`
+- Deadzone par défaut : `12%`, comme le dashboard SoArm101
+
+Le firmware transforme ensuite les axes en vitesses indépendantes pour les 4 roues mécanum.
+
 ### Exemples
 
 | Action | Trame hex (speed=100) |
@@ -195,10 +213,14 @@ Après une commande valide, le micro:bit renvoie 2 octets :
 
 ```
 microbit/src/
-  main.cpp         # Parser série + exécution des commandes
-  MotorDriver.h/cpp # Pilote I2C HR8833 + mouvements mécanum
-  Protocol.h       # Constantes du protocole
-  SerialRover.h/cpp # UART P1/P2 (UARTE1)
+  main.cpp                    # Wiring global setup/loop
+  CommandAction.h             # Entree de table commande -> fonction
+  CommandDispatcher.h/cpp     # Dispatch des commandes nommees
+  MecanumJoystickMapper.h/cpp # Mapping joystick analogique -> roues
+  MotorDriver.h/cpp           # Pilote I2C HR8833 + mouvements mécanum
+  Protocol.h                  # Constantes du protocole
+  ProtocolParser.h            # Parser binaire
+  SerialRover.h/cpp           # UART P1/P2 (UARTE1)
 ```
 
 ## Test depuis le PC (menu interactif)
@@ -255,6 +277,27 @@ Re-flasher apres modification firmware :
 cd microbit
 pio run -t upload
 ```
+
+## Pilotage Xbox / Bluetooth
+
+Le micro:bit V2 n'est pas une bonne cible pour gérer directement une manette Xbox BLE :
+le framework Arduino nRF52 utilisé ici est minimal, et l'ajout d'une pile HID/BLE complète rendrait
+le firmware moteur difficile à maintenir.
+
+Architecture recommandée :
+
+```
+Manette Xbox BLE -> ESP32 (NimBLE) -> UART protocole rover -> micro:bit -> moteurs
+```
+
+Le micro:bit reste concentré sur son rôle stable : parser le protocole série et piloter les moteurs.
+
+Pour l'axe gauche Xbox, envoyer la trame `CMD_JOYSTICK (0x30)` avec :
+- `axisLeftX` en `X`
+- `axisLeftY` en `Y`
+- une vitesse max configurable, par exemple `100`
+
+Le firmware applique une deadzone de `12%` et calcule les vitesses mécanum proportionnelles.
 
 ## Pilotage depuis MaixCam (Python)
 

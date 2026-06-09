@@ -43,6 +43,7 @@ CMD_SPIN_RIGHT = 0x0A
 CMD_PIVOT_RIGHT = 0x0B
 CMD_PIVOT_REAR = 0x0C
 CMD_RAW = 0x20
+CMD_JOYSTICK = 0x30
 
 WHEEL_FORWARD = 0x01
 WHEEL_BACKWARD = 0x02
@@ -88,6 +89,18 @@ def build_raw_frame(wheel_dirs: int, speed: int) -> bytes:
     return bytes(
         [PROTO_SYNC, CMD_RAW, wheel_dirs, speed, checksum4(PROTO_SYNC, CMD_RAW, wheel_dirs, speed)]
     )
+
+
+def build_joystick_frame(axis_x: int, axis_y: int, speed: int) -> bytes:
+    axis_x = max(-32768, min(32767, axis_x))
+    axis_y = max(-32768, min(32767, axis_y))
+    payload = (
+        axis_x.to_bytes(2, "little", signed=True)
+        + axis_y.to_bytes(2, "little", signed=True)
+        + bytes([speed])
+    )
+    frame = bytes([PROTO_SYNC, CMD_JOYSTICK]) + payload
+    return frame + bytes([sum(frame) & 0xFF])
 
 
 def list_serial_ports() -> list:
@@ -154,6 +167,7 @@ def print_menu(speed: int) -> None:
     print("  -- RAW mecanum --")
     for key, label, _ in RAW_PRESETS:
         print(f"  {key:<3} {label}")
+    print("  j   Envoyer axes joystick analogiques")
     print("  s   Changer la vitesse")
     print("  h   Afficher l'aide connexion")
     print("  q   Quitter (envoie STOP avant de partir)")
@@ -211,6 +225,22 @@ def main() -> int:
                 raw = input(f"Nouvelle vitesse [0-255, actuel={speed}]: ").strip()
                 if raw.isdigit():
                     speed = max(0, min(255, int(raw)))
+                continue
+            if choice == "j":
+                try:
+                    axis_x = int(input("Axe X [-32768..32767] (droite +): ").strip())
+                    axis_y = int(input("Axe Y [-32768..32767] (bas +, avant = negatif): ").strip())
+                except ValueError:
+                    print("Axes invalides.")
+                    continue
+                deadzone = int(32768 * 12 / 100)
+                magnitude = max(abs(axis_x), abs(axis_y))
+                if magnitude <= deadzone:
+                    print(
+                        f"ATTENTION deadzone 12% (~{deadzone}) : "
+                        f"|X|/|Y| max={magnitude} -> ACK possible mais pas de mouvement."
+                    )
+                send_frame(ser, build_joystick_frame(axis_x, axis_y, speed), "joystick")
                 continue
             if choice in cmd_map:
                 cmd = cmd_map[choice]

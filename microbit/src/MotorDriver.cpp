@@ -1,6 +1,16 @@
 #include "MotorDriver.h"
 #include "Protocol.h"
 
+namespace {
+uint8_t clamp_abs_speed(int16_t value) {
+    int16_t magnitude = value < 0 ? -value : value;
+    if (magnitude > 255) {
+        return 255;
+    }
+    return static_cast<uint8_t>(magnitude);
+}
+}
+
 MecanumCarDriver::MecanumCarDriver() {
 }
 
@@ -155,6 +165,13 @@ void MecanumCarDriver::pivot_rear(uint8_t speed) {
     motor_upper_right(0, speed);
     motor_lower_left(1, 0);
     motor_lower_right(1, 0);
+}
+
+void MecanumCarDriver::drive_signed(int16_t upper_left, int16_t upper_right, int16_t lower_left, int16_t lower_right) {
+    motor_upper_left(upper_left >= 0, clamp_abs_speed(upper_left));
+    motor_upper_right(upper_right >= 0, clamp_abs_speed(upper_right));
+    motor_lower_left(lower_left >= 0, clamp_abs_speed(lower_left));
+    motor_lower_right(lower_right >= 0, clamp_abs_speed(lower_right));
 }
 
 void MecanumCarDriver::drive_raw(uint8_t wheel_dirs, uint8_t speed) {

@@ -32,6 +32,7 @@ public:
     void spin_right(uint8_t speed);
     void pivot_right(uint8_t speed);
     void pivot_rear(uint8_t speed);
+    void drive_signed(int16_t upper_left, int16_t upper_right, int16_t lower_left, int16_t lower_right);
     void drive_raw(uint8_t wheel_dirs, uint8_t speed);
 
 private:

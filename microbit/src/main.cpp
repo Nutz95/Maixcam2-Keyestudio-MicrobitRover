@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "CommandDispatcher.h"
 #include "MotorDriver.h"
 #include "Protocol.h"
 #include "ProtocolParser.h"
@@ -6,7 +7,8 @@
 #include "SerialSafe.h"
 
 MecanumCarDriver car;
-ProtocolHandler protocol(car);
+CommandDispatcher dispatcher(car);
+ProtocolHandler protocol(dispatcher);
 
 static RxContext usb_ctx;
 static RxContext rover_ctx;

@@ -35,4 +35,5 @@ if ($Port) { $argsList += @("-p", $Port) }
 if ($Speed -ne 100) { $argsList += @("-s", "$Speed") }
 
 Write-Host "Lancement du menu de test ..."
+Write-Host "Commande J (joystick) : deadzone firmware 12% (~3932). Valeurs faibles = ACK sans mouvement." -ForegroundColor Yellow
 & "$PythonExe" "$Script" @argsList

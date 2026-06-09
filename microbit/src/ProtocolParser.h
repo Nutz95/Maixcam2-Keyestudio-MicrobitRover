@@ -2,8 +2,8 @@
 
 #include <Arduino.h>
 #include <Stream.h>
+#include "CommandDispatcher.h"
 #include "Protocol.h"
-#include "MotorDriver.h"
 #include "SerialSafe.h"
 
 enum RxState {
@@ -13,6 +13,12 @@ enum RxState {
     WAIT_RAW_SPEED,
     WAIT_CHECKSUM,
     WAIT_RAW_CHECKSUM,
+    WAIT_JOY_X_LO,
+    WAIT_JOY_X_HI,
+    WAIT_JOY_Y_LO,
+    WAIT_JOY_Y_HI,
+    WAIT_JOY_MAX_SPEED,
+    WAIT_JOY_CHECKSUM,
 };
 
 struct RxContext {
@@ -20,11 +26,15 @@ struct RxContext {
     uint8_t cmd = 0;
     uint8_t speed = 0;
     uint8_t dirs = 0;
+    uint8_t joy_x_lo = 0;
+    uint8_t joy_x_hi = 0;
+    uint8_t joy_y_lo = 0;
+    uint8_t joy_y_hi = 0;
 };
 
 class ProtocolHandler {
 public:
-    explicit ProtocolHandler(MecanumCarDriver& car) : _car(car) {}
+    explicit ProtocolHandler(CommandDispatcher& dispatcher) : _dispatcher(dispatcher) {}
 
     void feed(RxContext& ctx, uint8_t byte, Stream& reply_port, const char* src = "?") {
         switch (ctx.state) {
@@ -36,7 +46,7 @@ public:
 
             case WAIT_CMD:
                 ctx.cmd = byte;
-                ctx.state = WAIT_SPEED_OR_DIRS;
+                ctx.state = ctx.cmd == CMD_JOYSTICK ? WAIT_JOY_X_LO : WAIT_SPEED_OR_DIRS;
                 break;
 
             case WAIT_SPEED_OR_DIRS:
@@ -56,16 +66,53 @@ public:
 
             case WAIT_CHECKSUM:
                 if (byte == proto_checksum(PROTO_SYNC, ctx.cmd, ctx.speed)) {
-                    execute_command(ctx.cmd, ctx.speed, reply_port, src);
+                    if (_dispatcher.execute(ctx.cmd, ctx.speed)) {
+                        send_ack(reply_port, ctx.cmd);
+                        log_command(ctx.cmd, ctx.speed, src);
+                    }
                 }
                 ctx.state = WAIT_SYNC;
                 break;
 
             case WAIT_RAW_CHECKSUM:
                 if (byte == proto_checksum4(PROTO_SYNC, CMD_RAW, ctx.dirs, ctx.speed)) {
-                    _car.drive_raw(ctx.dirs, ctx.speed);
+                    _dispatcher.execute_raw(ctx.dirs, ctx.speed);
                     send_ack(reply_port, CMD_RAW);
                     log_command(CMD_RAW, ctx.speed, src);
+                }
+                ctx.state = WAIT_SYNC;
+                break;
+
+            case WAIT_JOY_X_LO:
+                ctx.joy_x_lo = byte;
+                ctx.state = WAIT_JOY_X_HI;
+                break;
+
+            case WAIT_JOY_X_HI:
+                ctx.joy_x_hi = byte;
+                ctx.state = WAIT_JOY_Y_LO;
+                break;
+
+            case WAIT_JOY_Y_LO:
+                ctx.joy_y_lo = byte;
+                ctx.state = WAIT_JOY_Y_HI;
+                break;
+
+            case WAIT_JOY_Y_HI:
+                ctx.joy_y_hi = byte;
+                ctx.state = WAIT_JOY_MAX_SPEED;
+                break;
+
+            case WAIT_JOY_MAX_SPEED:
+                ctx.speed = byte;
+                ctx.state = WAIT_JOY_CHECKSUM;
+                break;
+
+            case WAIT_JOY_CHECKSUM:
+                if (byte == joystick_checksum(ctx)) {
+                    _dispatcher.execute_joystick(joystick_x(ctx), joystick_y(ctx), ctx.speed);
+                    send_ack(reply_port, CMD_JOYSTICK);
+                    log_command(CMD_JOYSTICK, ctx.speed, src);
                 }
                 ctx.state = WAIT_SYNC;
                 break;
@@ -73,7 +120,7 @@ public:
     }
 
 private:
-    MecanumCarDriver& _car;
+    CommandDispatcher& _dispatcher;
 
     void send_ack(Stream& port, uint8_t cmd) {
         stream_write_byte(port, PROTO_ACK);
@@ -81,62 +128,27 @@ private:
     }
 
     void log_command(uint8_t cmd, uint8_t speed, const char* src) {
-        char line[48];
-        snprintf(line, sizeof(line), "[rover] %s cmd=0x%02X spd=%u", src, cmd, speed);
+        char line[72];
+        snprintf(line, sizeof(line), "[rover] %s %s cmd=0x%02X spd=%u",
+                 src, _dispatcher.command_name(cmd), cmd, speed);
         serial_usb_println(line);
     }
 
-    void execute_command(uint8_t cmd, uint8_t speed, Stream& reply_port, const char* src) {
-        if (speed == 0 && cmd != CMD_STOP && cmd != CMD_RAW) {
-            _car.stop();
-            return;
-        }
+    uint8_t joystick_checksum(const RxContext& ctx) const {
+        return static_cast<uint8_t>(
+            (PROTO_SYNC + CMD_JOYSTICK + ctx.joy_x_lo + ctx.joy_x_hi +
+             ctx.joy_y_lo + ctx.joy_y_hi + ctx.speed) & 0xFF);
+    }
 
-        switch (cmd) {
-            case CMD_STOP:
-                _car.stop();
-                break;
-            case CMD_FORWARD:
-                _car.move_forward(speed);
-                break;
-            case CMD_BACKWARD:
-                _car.move_backward(speed);
-                break;
-            case CMD_STRAFE_LEFT:
-                _car.strafe_left(speed);
-                break;
-            case CMD_STRAFE_RIGHT:
-                _car.strafe_right(speed);
-                break;
-            case CMD_DIAG_FL:
-                _car.diag_forward_left(speed);
-                break;
-            case CMD_DIAG_FR:
-                _car.diag_forward_right(speed);
-                break;
-            case CMD_DIAG_BL:
-                _car.diag_backward_left(speed);
-                break;
-            case CMD_DIAG_BR:
-                _car.diag_backward_right(speed);
-                break;
-            case CMD_SPIN_LEFT:
-                _car.spin_left(speed);
-                break;
-            case CMD_SPIN_RIGHT:
-                _car.spin_right(speed);
-                break;
-            case CMD_PIVOT_RIGHT:
-                _car.pivot_right(speed);
-                break;
-            case CMD_PIVOT_REAR:
-                _car.pivot_rear(speed);
-                break;
-            default:
-                return;
-        }
+    int16_t joystick_x(const RxContext& ctx) const {
+        return static_cast<int16_t>(
+            static_cast<uint16_t>(ctx.joy_x_lo) |
+            (static_cast<uint16_t>(ctx.joy_x_hi) << 8U));
+    }
 
-        send_ack(reply_port, cmd);
-        log_command(cmd, speed, src);
+    int16_t joystick_y(const RxContext& ctx) const {
+        return static_cast<int16_t>(
+            static_cast<uint16_t>(ctx.joy_y_lo) |
+            (static_cast<uint16_t>(ctx.joy_y_hi) << 8U));
     }
 };
