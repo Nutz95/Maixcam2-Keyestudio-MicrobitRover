@@ -6,7 +6,7 @@ Prerequis :
   bluetoothctl disponible (BlueZ)
 
 Le service HID 0x1812 n'apparait qu'apres pairing chiffre (comme sur ESP32/NimBLE).
-Ce script lance bluetoothctl (agent + pair/trust/connect) puis bleak avec pair=True.
+Une fois la manette appairee, ce script lance bluetoothctl trust/connect puis bleak.
 """
 
 import asyncio
@@ -65,9 +65,9 @@ def dump_services(client, title: str):
             print(f"  Char {char.uuid} [{props}]")
 
 
-async def run_bluetoothctl_pair(address: str, scan_seconds: float = 12.0) -> str:
-    """Lance bluetoothctl : agent, scan, pair, trust, connect."""
-    print("bluetoothctl: preparation pairing...")
+async def run_bluetoothctl_connect(address: str) -> str:
+    """Lance bluetoothctl : agent, info, trust, connect. Pas de disconnect."""
+    print("bluetoothctl: preparation (trust + connect)...")
     proc = await asyncio.create_subprocess_exec(
         "bluetoothctl",
         stdin=asyncio.subprocess.PIPE,
@@ -83,15 +83,12 @@ async def run_bluetoothctl_pair(address: str, scan_seconds: float = 12.0) -> str
     await send("power on", 0.5)
     await send("agent on", 0.2)
     await send("default-agent", 0.2)
-    await send("scan on", 0.2)
-    print(f"bluetoothctl: scan {scan_seconds:.0f}s (manette allumee)...")
-    await asyncio.sleep(scan_seconds)
-    await send("scan off", 0.5)
 
     addr = address.upper()
-    await send(f"pair {addr}", 8.0)
+    await send(f"info {addr}", 0.8)
     await send(f"trust {addr}", 1.0)
-    await send(f"connect {addr}", 5.0)
+    await send(f"connect {addr}", 7.0)
+    await send(f"info {addr}", 0.8)
     await send("quit", 0.2)
 
     stdout, _ = await proc.communicate()
@@ -123,35 +120,37 @@ async def find_xbox_device(address: str):
             return device
 
     print(f"Adresse {address} absente du scan bleak.")
-    return None
+    print("Fallback: connexion bleak directe par adresse BlueZ.")
+    return address
 
 
 async def connect_with_hid(device, pair: bool = True):
-    """Connecte bleak, tente pairing, reconnecte si HID absent."""
-    client = BleakClient(device, timeout=25.0, pair=pair)
-
-    print(f"Connexion bleak (pair={pair})...")
-    await client.connect()
-    print(f"Connecte: {client.is_connected}")
-    dump_services(client, "Services apres 1ere connexion:")
-
-    if has_hid_service(client):
-        return client
-
-    print("HID 0x1812 absent -> pairing bleak...")
-    try:
-        await client.pair()
-        print("pair() bleak OK")
-    except Exception as exc:
-        print(f"pair() bleak: {exc}")
-
-    await client.disconnect()
-    await asyncio.sleep(2.0)
-
-    print("Reconnexion bleak apres pairing...")
-    await client.connect()
-    dump_services(client, "Services apres reconnexion:")
-    return client
+    """Connecte bleak avec pair=True, retry si HID absent."""
+    last_error = None
+    for attempt in range(3):
+        print(f"Connexion bleak tentative {attempt + 1} (pair={pair})...")
+        client = BleakClient(device, timeout=30.0, pair=pair)
+        try:
+            await client.connect()
+            print(f"Connecte: {client.is_connected}")
+            dump_services(client, f"Services tentative {attempt + 1}:")
+            if has_hid_service(client):
+                return client
+            try:
+                await client.pair()
+                print("pair() bleak OK")
+            except Exception as exc:
+                print(f"pair() bleak: {exc}")
+            if client.is_connected:
+                await client.disconnect()
+            await asyncio.sleep(2.0)
+        except Exception as exc:
+            last_error = exc
+            print(f"bleak erreur: {exc}")
+            await asyncio.sleep(2.0)
+    if last_error is not None:
+        raise last_error
+    raise BleakError("HID 0x1812 indisponible")
 
 
 async def subscribe_hid(client) -> bool:
@@ -168,13 +167,13 @@ async def subscribe_hid(client) -> bool:
 async def main():
     address = XBOX_ADDRESS
 
-    btctl_out = await run_bluetoothctl_pair(address)
-    if not pairing_looks_ok(btctl_out):
-        print("Pairing bluetoothctl incertain — on continue quand meme avec bleak.")
+    btctl_out = await run_bluetoothctl_connect(address)
+    if "Paired: no" in btctl_out:
+        print("Manette non appairee. Faire pair une fois dans bluetoothctl.")
+        return
+    print("--- suite bleak ---")
 
     device = await find_xbox_device(address)
-    if device is None:
-        return
 
     client = None
     try:

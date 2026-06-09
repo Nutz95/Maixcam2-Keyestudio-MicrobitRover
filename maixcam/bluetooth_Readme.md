@@ -22,12 +22,15 @@ Doc Sipeed : https://wiki.sipeed.com/maixpy/doc/en/modules/bluetooth.html
 
 ## Manette Xbox
 
-`bluetooth_connect.py` fait tout automatiquement :
+`maixcam_xbox_rover.py` / `bluetooth_connect.py` :
 
-1. `bluetoothctl` : agent + scan + pair + trust + connect
-2. Scan bleak + connexion avec `pair=True`
-3. Si HID `0x1812` absent : `client.pair()` + reconnexion
-4. Abonnement notify sur `0x2A4D` (service HID)
+1. `bluetoothctl` : agent + `info` + `trust` + `connect`
+2. Lecture stick via `/dev/input/event*` (evdev) ou `/dev/input/js*`
+3. Fallback bleak seulement si aucun peripherique input Xbox detecte
+
+Sur MaixCam2, seuls `event0/1/2` existent souvent (pas de `js0`). Le script
+cherche le device dont le nom sysfs contient `Xbox` / `Microsoft`.
+Ne jamais `bluetoothctl disconnect` (eteint la manette).
 
 Sans pairing chiffre, seuls les services Microsoft/batterie sont visibles
 (pas de joystick). C'est le comportement normal avant appairage.
