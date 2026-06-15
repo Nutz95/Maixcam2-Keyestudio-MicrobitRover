@@ -9,9 +9,9 @@ Pour pousser **config.json** du repo vers la caméra : `.\deploy_rover_mecanum.p
 
 | Emplacement | Utilisé quand |
 |-------------|---------------|
-| `/root/roverMecanum/config.json` | **C'est celui lu en production** (après deploy) |
-| `./config.json` (cwd MaixVision) | Prioritaire si présent (`/tmp/maixpy_run/config.json`) |
-| `maixcam/roverMecanum/config.json` (repo) | Source à copier avec `-SyncConfig` ou scp manuel |
+| `/root/roverMecanum/config.json` | Copie deploy script (dev MaixVision) |
+| `/maixapp/apps/mecanum_rover_controler/config.json` | **App packagée** |
+| `maixcam/roverMecanum/config.json` (repo) | Source — `-SyncConfig` ou re-package |
 
 Au démarrage, la console affiche :  
 `config: path=... max_speed=... deadzone=...% sensitivity=...% expo=...`

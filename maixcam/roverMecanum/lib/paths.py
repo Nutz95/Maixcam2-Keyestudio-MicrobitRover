@@ -1,12 +1,14 @@
-"""Installation paths on MaixCam."""
+"""Installation paths on MaixCam (packaged app + optional deploy copy)."""
 
 import os
 
-# Deploy target (see tools/deploy_rover_mecanum.ps1).
+# Optional deploy target (tools/deploy_rover_mecanum.ps1).
 ROVER_MECANUM_ROOT = "/root/roverMecanum"
 
-# Fallback when no config file exists yet.
-DEFAULT_CONFIG_PATH = f"{ROVER_MECANUM_ROOT}/config.json"
+# App bundle root: parent of lib/ (works packaged and in MaixVision).
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+DEFAULT_CONFIG_PATH = os.path.join(APP_ROOT, "config.json")
 
 
 def resolve_config_path():
@@ -14,11 +16,12 @@ def resolve_config_path():
   Pick the active config.json.
 
   Search order:
-    1. ./config.json relative to MaixVision cwd (usually /tmp/maixpy_run/)
-    2. /root/roverMecanum/config.json (deployed copy)
-    3. DEFAULT_CONFIG_PATH (created on first run if missing)
+    1. config.json next to main.py (packaged app or MaixVision project)
+    2. ./config.json relative to cwd
+    3. /root/roverMecanum/config.json (deploy script copy)
   """
   candidates = (
+    os.path.join(APP_ROOT, "config.json"),
     os.path.join(os.getcwd(), "config.json"),
     f"{ROVER_MECANUM_ROOT}/config.json",
   )

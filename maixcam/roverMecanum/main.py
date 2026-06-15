@@ -1,19 +1,26 @@
 """
-MaixVision entry point — Xbox controller -> Mecanum rover.
+MaixVision / packaged app entry point — Xbox controller -> Mecanum rover.
 
-MaixVision runs this file from /tmp/maixpy_run/main.py.
-Shared code lives under /root/roverMecanum/ (deploy with tools/deploy_rover_mecanum.ps1).
-
-Config: edit /root/roverMecanum/config.json on the device, or deploy repo config with
-  .\\tools\\deploy_rover_mecanum.ps1 -SyncConfig
+Packaged install: /maixapp/apps/mecanum_rover_controler/
+MaixVision dev + deploy script: optional override from /root/roverMecanum/
 """
 
+import os
 import sys
 
-ROVER_MECANUM_ROOT = "/root/roverMecanum"
+_APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+_DEPLOY_ROOT = "/root/roverMecanum"
 
-if ROVER_MECANUM_ROOT not in sys.path:
-  sys.path.insert(0, ROVER_MECANUM_ROOT)
+# Packaged app lib/ (always required).
+if _APP_ROOT not in sys.path:
+  sys.path.insert(0, _APP_ROOT)
+
+# Dev workflow: deployed lib/ takes precedence when present.
+if (
+  os.path.isdir(os.path.join(_DEPLOY_ROOT, "lib"))
+  and _DEPLOY_ROOT not in sys.path
+):
+  sys.path.insert(0, _DEPLOY_ROOT)
 
 from lib.xbox_rover_app import XboxRoverApp
 
