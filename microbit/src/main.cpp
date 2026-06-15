@@ -10,8 +10,8 @@ MecanumCarDriver car;
 CommandDispatcher dispatcher(car);
 ProtocolHandler protocol(dispatcher);
 
-static RxContext usb_ctx;
-static RxContext rover_ctx;
+static UartIncomingFrame usb_incoming_frame;
+static UartIncomingFrame rover_incoming_frame;
 
 void setup() {
     Serial.begin(115200);
@@ -26,10 +26,10 @@ void setup() {
 
 void loop() {
     while (Serial.available() > 0) {
-        protocol.feed(usb_ctx, (uint8_t)Serial.read(), Serial, "usb");
+        protocol.feed_byte(usb_incoming_frame, (uint8_t)Serial.read(), Serial, "usb");
     }
 
     while (RoverSerial.available() > 0) {
-        protocol.feed(rover_ctx, (uint8_t)RoverSerial.read(), RoverSerial, "p1p2");
+        protocol.feed_byte(rover_incoming_frame, (uint8_t)RoverSerial.read(), RoverSerial, "p1p2");
     }
 }

@@ -6,130 +6,153 @@
 #include "Protocol.h"
 #include "SerialSafe.h"
 
-enum RxState {
-    WAIT_SYNC,
-    WAIT_CMD,
-    WAIT_SPEED_OR_DIRS,
-    WAIT_RAW_SPEED,
-    WAIT_CHECKSUM,
+/** Etat du parseur UART : quel octet de la trame on attend. */
+enum UartParserState {
+    WAIT_SYNC_BYTE,
+    WAIT_COMMAND_BYTE,
+    WAIT_PRESET_SPEED_OR_WHEEL_DIRS,
+    WAIT_RAW_WHEEL_SPEED,
+    WAIT_PRESET_CHECKSUM,
     WAIT_RAW_CHECKSUM,
-    WAIT_JOY_X_LO,
-    WAIT_JOY_X_HI,
-    WAIT_JOY_Y_LO,
-    WAIT_JOY_Y_HI,
-    WAIT_JOY_R_LO,
-    WAIT_JOY_R_HI,
-    WAIT_JOY_MAX_SPEED,
-    WAIT_JOY_CHECKSUM,
+    WAIT_STRAFE_LOW_BYTE,
+    WAIT_STRAFE_HIGH_BYTE,
+    WAIT_FORWARD_LOW_BYTE,
+    WAIT_FORWARD_HIGH_BYTE,
+    WAIT_SPIN_LOW_BYTE,
+    WAIT_SPIN_HIGH_BYTE,
+    WAIT_PIVOT_LOW_BYTE,
+    WAIT_PIVOT_HIGH_BYTE,
+    WAIT_JOYSTICK_MAX_SPEED,
+    WAIT_JOYSTICK_CHECKSUM,
 };
 
-struct RxContext {
-    RxState state = WAIT_SYNC;
-    uint8_t cmd = 0;
-    uint8_t speed = 0;
-    uint8_t dirs = 0;
-    uint8_t joy_x_lo = 0;
-    uint8_t joy_x_hi = 0;
-    uint8_t joy_y_lo = 0;
-    uint8_t joy_y_hi = 0;
-    uint8_t joy_r_lo = 0;
-    uint8_t joy_r_hi = 0;
+/** Octets deja recus pour la trame en cours de reception. */
+struct UartIncomingFrame {
+    UartParserState parser_state = WAIT_SYNC_BYTE;
+    uint8_t command_byte = 0;
+    uint8_t motor_speed = 0;
+    uint8_t wheel_direction_bits = 0;
+    uint8_t strafe_byte_low = 0;
+    uint8_t strafe_byte_high = 0;
+    uint8_t forward_byte_low = 0;
+    uint8_t forward_byte_high = 0;
+    uint8_t spin_byte_low = 0;
+    uint8_t spin_byte_high = 0;
+    uint8_t pivot_byte_low = 0;
+    uint8_t pivot_byte_high = 0;
 };
 
 class ProtocolHandler {
 public:
     explicit ProtocolHandler(CommandDispatcher& dispatcher) : _dispatcher(dispatcher) {}
 
-    void feed(RxContext& ctx, uint8_t byte, Stream& reply_port, const char* src = "?") {
-        switch (ctx.state) {
-            case WAIT_SYNC:
+    void feed_byte(UartIncomingFrame& incoming, uint8_t byte, Stream& reply_port, const char* source = "?") {
+        switch (incoming.parser_state) {
+            case WAIT_SYNC_BYTE:
                 if (byte == PROTO_SYNC) {
-                    ctx.state = WAIT_CMD;
+                    incoming.parser_state = WAIT_COMMAND_BYTE;
                 }
                 break;
 
-            case WAIT_CMD:
-                ctx.cmd = byte;
-                ctx.state = ctx.cmd == CMD_JOYSTICK ? WAIT_JOY_X_LO : WAIT_SPEED_OR_DIRS;
+            case WAIT_COMMAND_BYTE:
+                incoming.command_byte = byte;
+                incoming.parser_state = incoming.command_byte == CMD_JOYSTICK
+                    ? WAIT_STRAFE_LOW_BYTE
+                    : WAIT_PRESET_SPEED_OR_WHEEL_DIRS;
                 break;
 
-            case WAIT_SPEED_OR_DIRS:
-                if (ctx.cmd == CMD_RAW) {
-                    ctx.dirs = byte;
-                    ctx.state = WAIT_RAW_SPEED;
+            case WAIT_PRESET_SPEED_OR_WHEEL_DIRS:
+                if (incoming.command_byte == CMD_RAW) {
+                    incoming.wheel_direction_bits = byte;
+                    incoming.parser_state = WAIT_RAW_WHEEL_SPEED;
                 } else {
-                    ctx.speed = byte;
-                    ctx.state = WAIT_CHECKSUM;
+                    incoming.motor_speed = byte;
+                    incoming.parser_state = WAIT_PRESET_CHECKSUM;
                 }
                 break;
 
-            case WAIT_RAW_SPEED:
-                ctx.speed = byte;
-                ctx.state = WAIT_RAW_CHECKSUM;
+            case WAIT_RAW_WHEEL_SPEED:
+                incoming.motor_speed = byte;
+                incoming.parser_state = WAIT_RAW_CHECKSUM;
                 break;
 
-            case WAIT_CHECKSUM:
-                if (byte == proto_checksum(PROTO_SYNC, ctx.cmd, ctx.speed)) {
-                    if (_dispatcher.execute(ctx.cmd, ctx.speed)) {
-                        send_ack(reply_port, ctx.cmd);
-                        log_command(ctx.cmd, ctx.speed, src);
+            case WAIT_PRESET_CHECKSUM:
+                if (byte == proto_checksum(PROTO_SYNC, incoming.command_byte, incoming.motor_speed)) {
+                    if (_dispatcher.execute(incoming.command_byte, incoming.motor_speed)) {
+                        send_ack(reply_port, incoming.command_byte);
+                        log_command(incoming.command_byte, incoming.motor_speed, source);
                     }
                 }
-                ctx.state = WAIT_SYNC;
+                incoming.parser_state = WAIT_SYNC_BYTE;
                 break;
 
             case WAIT_RAW_CHECKSUM:
-                if (byte == proto_checksum4(PROTO_SYNC, CMD_RAW, ctx.dirs, ctx.speed)) {
-                    _dispatcher.execute_raw(ctx.dirs, ctx.speed);
+                if (byte == proto_checksum4(
+                        PROTO_SYNC, CMD_RAW, incoming.wheel_direction_bits, incoming.motor_speed)) {
+                    _dispatcher.execute_raw(incoming.wheel_direction_bits, incoming.motor_speed);
                     send_ack(reply_port, CMD_RAW);
-                    log_command(CMD_RAW, ctx.speed, src);
+                    log_command(CMD_RAW, incoming.motor_speed, source);
                 }
-                ctx.state = WAIT_SYNC;
+                incoming.parser_state = WAIT_SYNC_BYTE;
                 break;
 
-            case WAIT_JOY_X_LO:
-                ctx.joy_x_lo = byte;
-                ctx.state = WAIT_JOY_X_HI;
+            case WAIT_STRAFE_LOW_BYTE:
+                incoming.strafe_byte_low = byte;
+                incoming.parser_state = WAIT_STRAFE_HIGH_BYTE;
                 break;
 
-            case WAIT_JOY_X_HI:
-                ctx.joy_x_hi = byte;
-                ctx.state = WAIT_JOY_Y_LO;
+            case WAIT_STRAFE_HIGH_BYTE:
+                incoming.strafe_byte_high = byte;
+                incoming.parser_state = WAIT_FORWARD_LOW_BYTE;
                 break;
 
-            case WAIT_JOY_Y_LO:
-                ctx.joy_y_lo = byte;
-                ctx.state = WAIT_JOY_Y_HI;
+            case WAIT_FORWARD_LOW_BYTE:
+                incoming.forward_byte_low = byte;
+                incoming.parser_state = WAIT_FORWARD_HIGH_BYTE;
                 break;
 
-            case WAIT_JOY_Y_HI:
-                ctx.joy_y_hi = byte;
-                ctx.state = WAIT_JOY_R_LO;
+            case WAIT_FORWARD_HIGH_BYTE:
+                incoming.forward_byte_high = byte;
+                incoming.parser_state = WAIT_SPIN_LOW_BYTE;
                 break;
 
-            case WAIT_JOY_R_LO:
-                ctx.joy_r_lo = byte;
-                ctx.state = WAIT_JOY_R_HI;
+            case WAIT_SPIN_LOW_BYTE:
+                incoming.spin_byte_low = byte;
+                incoming.parser_state = WAIT_SPIN_HIGH_BYTE;
                 break;
 
-            case WAIT_JOY_R_HI:
-                ctx.joy_r_hi = byte;
-                ctx.state = WAIT_JOY_MAX_SPEED;
+            case WAIT_SPIN_HIGH_BYTE:
+                incoming.spin_byte_high = byte;
+                incoming.parser_state = WAIT_PIVOT_LOW_BYTE;
                 break;
 
-            case WAIT_JOY_MAX_SPEED:
-                ctx.speed = byte;
-                ctx.state = WAIT_JOY_CHECKSUM;
+            case WAIT_PIVOT_LOW_BYTE:
+                incoming.pivot_byte_low = byte;
+                incoming.parser_state = WAIT_PIVOT_HIGH_BYTE;
                 break;
 
-            case WAIT_JOY_CHECKSUM:
-                if (byte == joystick_checksum(ctx)) {
+            case WAIT_PIVOT_HIGH_BYTE:
+                incoming.pivot_byte_high = byte;
+                incoming.parser_state = WAIT_JOYSTICK_MAX_SPEED;
+                break;
+
+            case WAIT_JOYSTICK_MAX_SPEED:
+                incoming.motor_speed = byte;
+                incoming.parser_state = WAIT_JOYSTICK_CHECKSUM;
+                break;
+
+            case WAIT_JOYSTICK_CHECKSUM:
+                if (byte == joystick_frame_checksum(incoming)) {
                     _dispatcher.execute_joystick(
-                        joystick_x(ctx), joystick_y(ctx), joystick_r(ctx), ctx.speed);
+                        decode_strafe_axis(incoming),
+                        decode_forward_axis(incoming),
+                        decode_spin_axis(incoming),
+                        decode_pivot_axis(incoming),
+                        incoming.motor_speed);
                     send_ack(reply_port, CMD_JOYSTICK);
-                    log_command(CMD_JOYSTICK, ctx.speed, src);
+                    log_command(CMD_JOYSTICK, incoming.motor_speed, source);
                 }
-                ctx.state = WAIT_SYNC;
+                incoming.parser_state = WAIT_SYNC_BYTE;
                 break;
         }
     }
@@ -137,40 +160,47 @@ public:
 private:
     CommandDispatcher& _dispatcher;
 
-    void send_ack(Stream& port, uint8_t cmd) {
+    void send_ack(Stream& port, uint8_t command_byte) {
         stream_write_byte(port, PROTO_ACK);
-        stream_write_byte(port, cmd);
+        stream_write_byte(port, command_byte);
     }
 
-    void log_command(uint8_t cmd, uint8_t speed, const char* src) {
+    void log_command(uint8_t command_byte, uint8_t speed, const char* source) {
         char line[72];
         snprintf(line, sizeof(line), "[rover] %s %s cmd=0x%02X spd=%u",
-                 src, _dispatcher.command_name(cmd), cmd, speed);
+                 source, _dispatcher.command_name(command_byte), command_byte, speed);
         serial_usb_println(line);
     }
 
-    uint8_t joystick_checksum(const RxContext& ctx) const {
+    uint8_t joystick_frame_checksum(const UartIncomingFrame& incoming) const {
         return static_cast<uint8_t>(
-            (PROTO_SYNC + CMD_JOYSTICK + ctx.joy_x_lo + ctx.joy_x_hi +
-             ctx.joy_y_lo + ctx.joy_y_hi + ctx.joy_r_lo + ctx.joy_r_hi +
-             ctx.speed) & 0xFF);
+            (PROTO_SYNC + CMD_JOYSTICK
+             + incoming.strafe_byte_low + incoming.strafe_byte_high
+             + incoming.forward_byte_low + incoming.forward_byte_high
+             + incoming.spin_byte_low + incoming.spin_byte_high
+             + incoming.pivot_byte_low + incoming.pivot_byte_high
+             + incoming.motor_speed) & 0xFF);
     }
 
-    int16_t joystick_x(const RxContext& ctx) const {
+    static int16_t decode_signed_axis(uint8_t byte_low, uint8_t byte_high) {
         return static_cast<int16_t>(
-            static_cast<uint16_t>(ctx.joy_x_lo) |
-            (static_cast<uint16_t>(ctx.joy_x_hi) << 8U));
+            static_cast<uint16_t>(byte_low) |
+            (static_cast<uint16_t>(byte_high) << 8U));
     }
 
-    int16_t joystick_y(const RxContext& ctx) const {
-        return static_cast<int16_t>(
-            static_cast<uint16_t>(ctx.joy_y_lo) |
-            (static_cast<uint16_t>(ctx.joy_y_hi) << 8U));
+    int16_t decode_strafe_axis(const UartIncomingFrame& incoming) const {
+        return decode_signed_axis(incoming.strafe_byte_low, incoming.strafe_byte_high);
     }
 
-    int16_t joystick_r(const RxContext& ctx) const {
-        return static_cast<int16_t>(
-            static_cast<uint16_t>(ctx.joy_r_lo) |
-            (static_cast<uint16_t>(ctx.joy_r_hi) << 8U));
+    int16_t decode_forward_axis(const UartIncomingFrame& incoming) const {
+        return decode_signed_axis(incoming.forward_byte_low, incoming.forward_byte_high);
+    }
+
+    int16_t decode_spin_axis(const UartIncomingFrame& incoming) const {
+        return decode_signed_axis(incoming.spin_byte_low, incoming.spin_byte_high);
+    }
+
+    int16_t decode_pivot_axis(const UartIncomingFrame& incoming) const {
+        return decode_signed_axis(incoming.pivot_byte_low, incoming.pivot_byte_high);
     }
 };

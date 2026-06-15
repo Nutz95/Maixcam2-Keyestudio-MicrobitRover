@@ -91,14 +91,22 @@ def build_raw_frame(wheel_dirs: int, speed: int) -> bytes:
     )
 
 
-def build_joystick_frame(axis_x: int, axis_y: int, speed: int, axis_rot: int = 0) -> bytes:
-    axis_x = max(-32768, min(32767, axis_x))
-    axis_y = max(-32768, min(32767, axis_y))
-    axis_rot = max(-32768, min(32767, axis_rot))
+def build_joystick_frame(
+    axis_strafe: int,
+    axis_forward: int,
+    speed: int,
+    axis_spin: int = 0,
+    axis_pivot: int = 0,
+) -> bytes:
+    axis_strafe = max(-32768, min(32767, axis_strafe))
+    axis_forward = max(-32768, min(32767, axis_forward))
+    axis_spin = max(-32768, min(32767, axis_spin))
+    axis_pivot = max(-32768, min(32767, axis_pivot))
     payload = (
-        axis_x.to_bytes(2, "little", signed=True)
-        + axis_y.to_bytes(2, "little", signed=True)
-        + axis_rot.to_bytes(2, "little", signed=True)
+        axis_strafe.to_bytes(2, "little", signed=True)
+        + axis_forward.to_bytes(2, "little", signed=True)
+        + axis_spin.to_bytes(2, "little", signed=True)
+        + axis_pivot.to_bytes(2, "little", signed=True)
         + bytes([speed])
     )
     frame = bytes([PROTO_SYNC, CMD_JOYSTICK]) + payload

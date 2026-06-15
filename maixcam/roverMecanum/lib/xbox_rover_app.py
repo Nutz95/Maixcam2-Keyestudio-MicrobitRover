@@ -1,8 +1,9 @@
 import threading
 
-from maix import app, display, time, touchscreen
+from maix import app, display, image, time, touchscreen
 
 from lib.bluetooth_installer import BluetoothInstaller
+from lib.camera_preview_service import CameraPreviewService
 from lib.config_store import ConfigStore
 from lib.rover_uart_client import RoverUartClient
 from lib.uart_initializer import UartInitializer
@@ -11,7 +12,7 @@ from lib.xbox_input_service import XboxInputService
 
 
 class XboxRoverApp:
-  """UI thread + main UART loop."""
+  """Control loop (UART + touch) and separate display thread for camera HUD."""
 
   TOUCH_DEBOUNCE_MS = 900
 
@@ -19,6 +20,9 @@ class XboxRoverApp:
     self._config_store = ConfigStore()
     self._config = self._config_store.load()
     rover_cfg = self._config.get("rover", {})
+    cam_cfg = self._config.get("camera", {})
+    display_fps = max(1, min(30, int(cam_cfg.get("display_fps", 15))))
+    self._display_interval_ms = max(1, int(1000 / display_fps))
     serial = UartInitializer().create()
     self._rover = RoverUartClient(
       serial,
@@ -29,59 +33,108 @@ class XboxRoverApp:
     self._disp = display.Display()
     self._ui = UiDrawer(self._disp.width(), self._disp.height())
     self._ts = touchscreen.TouchScreen()
-    self._send_interval = rover_cfg.get("send_interval_ms", 50)
+    self._send_interval = rover_cfg.get("send_interval_ms", 30)
     self._exit = threading.Event()
     self._touch_action = None
     self._touch_lock = threading.Lock()
     self._touch_ignore_until = 0
     self._was_connected = False
     self._was_busy = False
+    self._camera = None
+    self._shutdown_done = False
 
   def run(self):
     BluetoothInstaller().install()
-    ui_thread = threading.Thread(target=self._ui_loop, daemon=True)
-    ui_thread.start()
+    self._start_camera()
+
+    display_thread = threading.Thread(target=self._display_loop, daemon=True)
+    display_thread.start()
 
     send_ms = 0
     was_connected = False
 
+    try:
+      while not app.need_exit() and not self._exit.is_set():
+        self._xbox.poll()
+        self._read_touch()
+        self._handle_touch()
+        self._on_connection_change()
+
+        _status, connected, _busy, _state, drive = self._xbox.snapshot()
+        now = time.ticks_ms()
+        if connected and drive is not None and now - send_ms >= self._send_interval:
+          self._send_drive(drive)
+          send_ms = now
+        elif was_connected and not connected:
+          self._rover.send_stop()
+
+        was_connected = connected
+        time.sleep_ms(1)
+    finally:
+      self.shutdown()
+      display_thread.join(timeout=1.0)
+
+  def _display_loop(self):
+    last_draw = 0
     while not app.need_exit() and not self._exit.is_set():
-      self._handle_touch()
-      self._on_connection_change()
-
-      status, connected, _busy, _state, drive = self._xbox.snapshot()
       now = time.ticks_ms()
-      if connected and drive is not None and now - send_ms >= self._send_interval:
-        self._send_drive(drive)
-        send_ms = now
-      elif was_connected and not connected:
-        self._rover.send_stop()
+      if now - last_draw >= self._display_interval_ms:
+        self._draw_frame()
+        last_draw = now
+      time.sleep_ms(4)
 
-      was_connected = connected
-      time.sleep_ms(10)
-
+  def shutdown(self):
+    if self._shutdown_done:
+      return
+    self._shutdown_done = True
     self._exit.set()
     self._xbox.request_stop()
-    self._rover.send_stop()
-    ui_thread.join(timeout=1.0)
+    try:
+      self._rover.send_stop()
+    except Exception:
+      pass
+    if self._camera is not None:
+      self._camera.stop()
+      self._camera = None
 
-  def _ui_loop(self):
-    while not app.need_exit() and not self._exit.is_set():
-      status, connected, busy, state, drive = self._xbox.snapshot()
-      img = self._ui.draw_frame(
-        status, connected, busy, state, drive,
-        self._rover.max_speed, self._rover.last_ack,
-      )
-      self._disp.show(img)
+  def _start_camera(self):
+    cam_cfg = self._config.get("camera", {})
+    if not cam_cfg.get("enabled", True):
+      return
+    width = int(cam_cfg.get("width", 1280))
+    height = int(cam_cfg.get("height", 720))
+    fps = int(cam_cfg.get("fps", 60))
+    pixel_format = cam_cfg.get("format", "rgb888")
+    self._camera = CameraPreviewService(
+      self._disp, width, height, fps=fps, pixel_format=pixel_format,
+    )
+    self._camera.start()
+    if self._camera.error:
+      print(f"camera disabled: {self._camera.error}")
+      self._camera.stop()
+      self._camera = None
+    else:
+      print(f"display: {int(1000 / self._display_interval_ms)} fps target")
 
-      x, y, pressed = self._ts.read()
-      if pressed:
-        with self._touch_lock:
-          self._touch_action = (x, y)
-      time.sleep_ms(25)
+  def _draw_frame(self):
+    frame = None
+    if self._camera is not None:
+      frame = self._camera.get_frame()
+    if frame is None:
+      frame = image.Image(self._disp.width(), self._disp.height(), bg=image.COLOR_BLACK)
+
+    _status, connected, busy, state, drive = self._xbox.snapshot()
+    self._ui.draw_overlay(frame, connected, busy, state, drive)
+    self._disp.show(frame)
+
+  def _read_touch(self):
+    x, y, pressed = self._ts.read()
+    if pressed:
+      with self._touch_lock:
+        self._touch_action = (x, y)
 
   def _on_connection_change(self):
-    status, connected, busy, _s, _d = self._xbox.snapshot()
+    _status, connected, busy, _s, _d = self._xbox.snapshot()
     now = time.ticks_ms()
     if connected != self._was_connected or busy != self._was_busy:
       self._touch_ignore_until = now + self.TOUCH_DEBOUNCE_MS
@@ -127,7 +180,12 @@ class XboxRoverApp:
     if drive.preset_cmd is not None:
       self._rover.send_preset(drive.preset_cmd)
       return
-    self._rover.send_joystick(drive.axis_x, drive.axis_y, drive.axis_rot)
+    self._rover.send_joystick(
+      drive.axis_strafe,
+      drive.axis_forward,
+      drive.axis_spin,
+      drive.axis_pivot,
+    )
 
   def _in_rect(self, x, y, rect):
     return rect[0] <= x < rect[0] + rect[2] and rect[1] <= y < rect[1] + rect[3]

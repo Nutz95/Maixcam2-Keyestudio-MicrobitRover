@@ -2,21 +2,23 @@ from lib.protocol_constants import CMD_JOYSTICK, PROTO_SYNC
 
 
 class JoystickFrameBuilder:
-  """Build CMD_JOYSTICK 0x30 frames (strafe, forward, rotation, max speed)."""
+  """Trame CMD_JOYSTICK 0x30 : strafe, forward, spin, pivot, vitesse max."""
 
-  def build(self, axis_x, axis_y, axis_rot, speed):
-    axis_x = max(-32768, min(32767, int(axis_x)))
-    axis_y = max(-32768, min(32767, int(axis_y)))
-    axis_rot = max(-32768, min(32767, int(axis_rot)))
+  def build(self, axis_strafe, axis_forward, axis_spin, axis_pivot, speed):
+    axis_strafe = max(-32768, min(32767, int(axis_strafe)))
+    axis_forward = max(-32768, min(32767, int(axis_forward)))
+    axis_spin = max(-32768, min(32767, int(axis_spin)))
+    axis_pivot = max(-32768, min(32767, int(axis_pivot)))
     speed = max(0, min(255, int(speed)))
     payload = (
-      axis_x.to_bytes(2, "little", signed=True)
-      + axis_y.to_bytes(2, "little", signed=True)
-      + axis_rot.to_bytes(2, "little", signed=True)
+      axis_strafe.to_bytes(2, "little", signed=True)
+      + axis_forward.to_bytes(2, "little", signed=True)
+      + axis_spin.to_bytes(2, "little", signed=True)
+      + axis_pivot.to_bytes(2, "little", signed=True)
       + bytes([speed])
     )
     frame = bytes([PROTO_SYNC, CMD_JOYSTICK]) + payload
     return frame + bytes([sum(frame) & 0xFF])
 
   def build_stop(self):
-    return self.build(0, 0, 0, 0)
+    return self.build(0, 0, 0, 0, 0)

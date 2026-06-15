@@ -10,7 +10,13 @@ public:
     void set_deadzone_percent(uint8_t deadzone_percent);
     uint8_t deadzone_percent() const;
 
-    void drive(MecanumCarDriver& car, int16_t axis_x, int16_t axis_y, int16_t axis_rot, uint8_t max_speed) const;
+    void drive(
+        MecanumCarDriver& car,
+        int16_t axis_strafe,
+        int16_t axis_forward,
+        int16_t axis_spin,
+        int16_t axis_pivot,
+        uint8_t max_speed) const;
 
 private:
     uint8_t _deadzone_percent;

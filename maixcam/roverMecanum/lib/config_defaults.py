@@ -3,12 +3,20 @@
 
 def default_config():
     return {
-        "mapping_revision": 2,
+        "mapping_revision": 4,
         "controller_name": "Xbox Wireless Controller",
         "controller_mac": "",
+        "camera": {
+            "enabled": True,
+            "width": 1280,
+            "height": 720,
+            "fps": 30,
+            "format": "yuv420",
+            "display_fps": 15,
+        },
         "rover": {
             "max_speed": 255,
-            "send_interval_ms": 50,
+            "send_interval_ms": 30,
             "deadzone_percent": 2,
             "wait_ack": False,
         },
@@ -16,12 +24,24 @@ def default_config():
             "axes": {
                 "drive_forward": "left_y",
                 "drive_strafe": "trigger_diff",
-                "drive_rotate": "left_x",
+                "drive_spin": "right_x",
+                "drive_pivot": "left_x",
             },
             "invert": {
                 "left_y": False,
                 "left_x": False,
+                "right_x": False,
                 "trigger_diff": False,
+            },
+            "dpad": {
+                "up": "forward",
+                "down": "backward",
+                "left": "strafe_left",
+                "right": "strafe_right",
+                "up_left": "diag_fl",
+                "up_right": "diag_fr",
+                "down_left": "diag_bl",
+                "down_right": "diag_br",
             },
             "buttons": {
                 "btn_a": "stop",

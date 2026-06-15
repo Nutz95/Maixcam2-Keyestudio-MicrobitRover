@@ -60,14 +60,18 @@ class ConfigStore:
         self._data["evdev"] = dict(base["evdev"])
       self._data["mapping_revision"] = target_revision
       self._data["mapping"]["axes"] = dict(base["mapping"]["axes"])
+      if "dpad" in base["mapping"]:
+        self._data["mapping"]["dpad"] = dict(base["mapping"]["dpad"])
       self._data["evdev"] = dict(base["evdev"])
+      if "camera" in base:
+        self._data["camera"] = dict(base["camera"])
       changed = True
       print(
         "config: mapping upgraded to revision"
-        f" {target_revision} (F=left_y C=triggers R=left_x)"
+        f" {target_revision} (forward=left_y strafe=triggers spin=right_x pivot=left_x)"
       )
 
-    for section in ("rover", "mapping", "evdev"):
+    for section in ("rover", "mapping", "evdev", "camera"):
       if section not in self._data:
         self._data[section] = base[section]
         continue
@@ -86,6 +90,13 @@ class ConfigStore:
       for key, value in base["mapping"]["buttons"].items():
         if key not in self._data["mapping"]["buttons"]:
           self._data["mapping"]["buttons"][key] = value
+    if "dpad" in base.get("mapping", {}):
+      if "dpad" not in self._data.get("mapping", {}):
+        self._data["mapping"]["dpad"] = dict(base["mapping"]["dpad"])
+      else:
+        for key, value in base["mapping"]["dpad"].items():
+          if key not in self._data["mapping"]["dpad"]:
+            self._data["mapping"]["dpad"][key] = value
 
     if changed:
       self.save()

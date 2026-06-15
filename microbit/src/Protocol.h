@@ -14,9 +14,11 @@
 //     00 = stop, 01 = forward, 10 = backward, 11 = reserved/stop
 //   CHECKSUM = (0xAA + 0x20 + WHEEL_DIRS + SPEED) & 0xFF
 //
-// Joystick frame (10 bytes):
-//   [0xAA] [0x30] [X_LO] [X_HI] [Y_LO] [Y_HI] [R_LO] [R_HI] [MAX_SPEED] [CHECKSUM]
-//   X = strafe, Y = forward (negative = forward), R = rotation (+ = spin left).
+// Joystick frame (12 bytes):
+//   [SYNC][CMD][STRAFE_LO][STRAFE_HI][FORWARD_LO][FORWARD_HI]
+//        [SPIN_LO][SPIN_HI][PIVOT_LO][PIVOT_HI][MAX_SPEED][CHECKSUM]
+//   strafe = crab, forward (negative = ahead), spin = rotate in place,
+//   pivot = car-like turn (+ = pivot right).
 //   CHECKSUM = sum(previous bytes) & 0xFF
 
 static const uint8_t PROTO_SYNC = 0xAA;

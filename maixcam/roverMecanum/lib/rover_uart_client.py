@@ -18,9 +18,9 @@ class RoverUartClient:
   def set_max_speed(self, speed):
     self.max_speed = max(0, min(255, int(speed)))
 
-  def send_joystick(self, axis_x, axis_y, axis_rot=0, speed=None):
+  def send_joystick(self, axis_strafe, axis_forward, axis_spin=0, axis_pivot=0, speed=None):
     spd = self.max_speed if speed is None else speed
-    frame = self._joystick_builder.build(axis_x, axis_y, axis_rot, spd)
+    frame = self._joystick_builder.build(axis_strafe, axis_forward, axis_spin, axis_pivot, spd)
     self.serial.write(frame)
     if self.wait_ack:
       self.last_ack = self._read_ack()

@@ -39,23 +39,38 @@ uint8_t MecanumJoystickMapper::deadzone_percent() const {
 
 void MecanumJoystickMapper::drive(
     MecanumCarDriver& car,
-    int16_t axis_x,
-    int16_t axis_y,
-    int16_t axis_rot,
+    int16_t axis_strafe,
+    int16_t axis_forward,
+    int16_t axis_spin,
+    int16_t axis_pivot,
     uint8_t max_speed) const {
-    const int16_t x = normalize_axis(axis_x);
-    const int16_t y = normalize_axis(static_cast<int16_t>(-axis_y));
-    const int16_t r = normalize_axis(axis_rot);
+    const int16_t strafe = normalize_axis(axis_strafe);
+    const int16_t forward = normalize_axis(static_cast<int16_t>(-axis_forward));
+    const int16_t spin = normalize_axis(axis_spin);
+    const int16_t pivot = normalize_axis(axis_pivot);
 
-    if (x == 0 && y == 0 && r == 0) {
+    if (strafe == 0 && forward == 0 && spin == 0 && pivot == 0) {
         car.stop();
         return;
     }
 
-    const int32_t upper_left = static_cast<int32_t>(y) + x + r;
-    const int32_t upper_right = static_cast<int32_t>(y) - x - r;
-    const int32_t lower_left = static_cast<int32_t>(y) - x + r;
-    const int32_t lower_right = static_cast<int32_t>(y) + x - r;
+    int32_t upper_left = static_cast<int32_t>(forward) + strafe + spin;
+    int32_t upper_right = static_cast<int32_t>(forward) - strafe - spin;
+    int32_t lower_left = static_cast<int32_t>(forward) - strafe + spin;
+    int32_t lower_right = static_cast<int32_t>(forward) + strafe - spin;
+
+    if (pivot > 0) {
+        upper_left += pivot;
+        lower_left += pivot;
+        upper_right = (upper_right * (kAxisMax - pivot)) / kAxisMax;
+        lower_right = (lower_right * (kAxisMax - pivot)) / kAxisMax;
+    } else if (pivot < 0) {
+        const int32_t pivot_magnitude = -pivot;
+        upper_right += pivot_magnitude;
+        lower_right += pivot_magnitude;
+        upper_left = (upper_left * (kAxisMax - pivot_magnitude)) / kAxisMax;
+        lower_left = (lower_left * (kAxisMax - pivot_magnitude)) / kAxisMax;
+    }
 
     int32_t max_magnitude = labs(upper_left);
     max_magnitude = max_i32(max_magnitude, labs(upper_right));
@@ -66,14 +81,16 @@ void MecanumJoystickMapper::drive(
         return;
     }
 
-    int32_t input_mag = max_i32(max_i32(labs(x), labs(y)), labs(r));
-    int32_t effective = (static_cast<int32_t>(max_speed) * input_mag) / kAxisMax;
+    int32_t input_magnitude = max_i32(
+        max_i32(labs(strafe), labs(forward)),
+        max_i32(labs(spin), labs(pivot)));
+    int32_t effective_speed = (static_cast<int32_t>(max_speed) * input_magnitude) / kAxisMax;
 
     car.drive_signed(
-        clamp_signed_speed((upper_left * effective) / max_magnitude),
-        clamp_signed_speed((upper_right * effective) / max_magnitude),
-        clamp_signed_speed((lower_left * effective) / max_magnitude),
-        clamp_signed_speed((lower_right * effective) / max_magnitude));
+        clamp_signed_speed((upper_left * effective_speed) / max_magnitude),
+        clamp_signed_speed((upper_right * effective_speed) / max_magnitude),
+        clamp_signed_speed((lower_left * effective_speed) / max_magnitude),
+        clamp_signed_speed((lower_right * effective_speed) / max_magnitude));
 }
 
 int16_t MecanumJoystickMapper::normalize_axis(int16_t axis) const {

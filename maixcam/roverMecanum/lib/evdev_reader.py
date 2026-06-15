@@ -4,6 +4,7 @@ import struct
 from lib.controller_state import ControllerState
 from lib.evdev_axis_mapper import EvdevAxisMapper, EvdevTriggerMapper
 from lib.evdev_constants import (
+  ABS_HAT0X, ABS_HAT0Y, BTN_DPAD_DOWN, BTN_DPAD_LEFT, BTN_DPAD_RIGHT, BTN_DPAD_UP,
   BTN_NAME_BY_CODE, BTN_TL2, BTN_TR2, EV_ABS, EV_KEY, EV_SYN, SYN_REPORT,
 )
 from lib.evdev_sysfs_reader import EvdevSysfsReader
@@ -30,6 +31,10 @@ class EvdevReader:
     self._abs_event_count = 0
     self._lt_btn = 0
     self._rt_btn = 0
+    self._dpad_x = 0
+    self._dpad_y = 0
+    self._dpad_btn_x = 0
+    self._dpad_btn_y = 0
 
   def open(self):
     self._file = open(self.event_path, "rb")
@@ -41,6 +46,27 @@ class EvdevReader:
       except OSError:
         pass
       self._file = None
+
+  def drain_available(self):
+    """Read every pending evdev event (non-blocking)."""
+    if self._file is None:
+      return 0
+    count = 0
+    while self._file is not None:
+      ready, _, _ = select.select([self._file], [], [], 0)
+      if not ready:
+        break
+      try:
+        data = self._file.read(self._ev_size)
+      except OSError as exc:
+        if exc.errno == 19:
+          raise
+        break
+      if not data or len(data) < self._ev_size:
+        break
+      self._process_event(data)
+      count += 1
+    return count
 
   def wait_and_poll(self, timeout_sec=0.05):
     if self._file is None:
@@ -126,8 +152,22 @@ class EvdevReader:
     return mapper
 
   def _feed_abs(self, code, value):
+    if code in (ABS_HAT0X, 6):
+      self._dpad_x = self._hat_value(value)
+      return
+    if code in (ABS_HAT0Y, 7):
+      self._dpad_y = self._hat_value(value)
+      return
     mapper = self._ensure_mapper(code, value)
     mapper.set_raw(value)
+
+  @staticmethod
+  def _hat_value(value):
+    if value > 0:
+      return 1
+    if value < 0:
+      return -1
+    return 0
 
   def _feed_key(self, code, value):
     if code == BTN_TL2:
@@ -135,6 +175,18 @@ class EvdevReader:
       return
     if code == BTN_TR2:
       self._rt_btn = 32767 if value else 0
+      return
+    if code == BTN_DPAD_LEFT:
+      self._dpad_btn_x = -1 if value else 0
+      return
+    if code == BTN_DPAD_RIGHT:
+      self._dpad_btn_x = 1 if value else 0
+      return
+    if code == BTN_DPAD_UP:
+      self._dpad_btn_y = -1 if value else 0
+      return
+    if code == BTN_DPAD_DOWN:
+      self._dpad_btn_y = 1 if value else 0
       return
     name = BTN_NAME_BY_CODE.get(code)
     if name is None:
@@ -149,6 +201,10 @@ class EvdevReader:
     self.state.right_y = self._read_axis(layout.right_y)
     self.state.lt = max(self._read_axis(layout.lt), self._lt_btn)
     self.state.rt = max(self._read_axis(layout.rt), self._rt_btn)
+    hat_x = self._dpad_x if self._dpad_x != 0 else self._dpad_btn_x
+    hat_y = self._dpad_y if self._dpad_y != 0 else self._dpad_btn_y
+    self.state.dpad_x = hat_x
+    self.state.dpad_y = hat_y
 
   def _read_axis(self, code):
     mapper = self._mappers.get(code)

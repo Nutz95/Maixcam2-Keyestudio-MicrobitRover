@@ -12,7 +12,7 @@ from lib.evdev_reader import EvdevReader
 
 
 class XboxInputService:
-  """Background thread: BlueZ + evdev read + mapping."""
+  """BlueZ in background thread; evdev polled on main loop (MaixPy GIL)."""
 
   def __init__(self, config_store):
     self._config_store = config_store
@@ -30,25 +30,45 @@ class XboxInputService:
     self._thread = None
     self._reader = None
     self._force_pair = False
+    self._handoff = False
 
   def _log_drive_mapping(self):
     axes = self._config_store.get().get("mapping", {}).get("axes", {})
     print(
       "drive mapping:"
-      f" F={axes.get('drive_forward', 'left_y')}"
-      f" C={axes.get('drive_strafe', 'trigger_diff')}"
-      f" R={axes.get('drive_rotate', 'left_x')}"
+      f" forward={axes.get('drive_forward', 'left_y')}"
+      f" strafe={axes.get('drive_strafe', 'trigger_diff')}"
+      f" spin={axes.get('drive_spin', axes.get('drive_rotate', 'right_x'))}"
+      f" pivot={axes.get('drive_pivot', 'left_x')}"
     )
 
   def snapshot(self):
     with self._lock:
-      return self.status, self.connected, self.busy, self.state, self.drive
+      state_copy = self.state.copy() if hasattr(self.state, "copy") else self.state
+      return self.status, self.connected, self.busy, state_copy, self.drive
+
+  def poll(self):
+    """Drain evdev on main thread — call every control-loop iteration."""
+    with self._lock:
+      if not self._handoff or self._reader is None:
+        return
+      reader = self._reader
+    try:
+      reader.drain_available()
+      live = reader.state.copy()
+      drive = self._mapper.compute(live)
+      with self._lock:
+        self.state = live
+        self.drive = drive
+    except OSError as exc:
+      if exc.errno == 19:
+        self._on_reader_lost("Controller disconnected")
+      else:
+        raise
 
   def start_connect(self):
     with self._lock:
-      if self.connected:
-        return
-      if self.busy:
+      if self.connected or self.busy:
         return
     self._start_worker(force_pair=False)
 
@@ -62,6 +82,7 @@ class XboxInputService:
     if self._thread and self._thread.is_alive():
       return
     self._stop.clear()
+    self._handoff = False
     with self._lock:
       self.busy = True
       self.connected = False
@@ -73,9 +94,12 @@ class XboxInputService:
 
   def request_stop(self):
     self._stop.set()
-    reader = self._reader
-    if reader is not None:
-      reader.close()
+    self._close_reader()
+    with self._lock:
+      self.connected = False
+      self.drive = None
+      if self.status == "Connected — drive":
+        self.status = "Ready"
 
   def _set_status(self, status):
     with self._lock:
@@ -85,26 +109,35 @@ class XboxInputService:
     with self._lock:
       self.connected = connected
 
-  def _update_drive(self):
-    if self._reader is None:
-      return
+  def _close_reader(self):
     with self._lock:
-      self.state = self._reader.state
-      self.drive = self._mapper.compute(self.state)
+      reader = self._reader
+      self._reader = None
+      self._handoff = False
+    if reader is not None:
+      reader.close()
+
+  def _on_reader_lost(self, status):
+    self._close_reader()
+    with self._lock:
+      self.connected = False
+      self.drive = None
+      self.status = status
 
   def _worker(self):
+    handed_off = False
     try:
       self._mapper.update_config(self._config_store.get())
 
       if not self._force_pair:
         with self._lock:
-          already = self.connected and self._reader is not None
+          already = self._handoff and self._reader is not None
         if already:
           return
         ev_path = self._finder.find_xbox_event()
         if ev_path:
           print(f"input already present: {ev_path}")
-          self._run_evdev_loop(ev_path)
+          handed_off = self._open_evdev(ev_path)
           return
 
       if self._force_pair:
@@ -130,7 +163,7 @@ class XboxInputService:
       ev_path = self._wait_for_input()
       if ev_path is None:
         return
-      self._run_evdev_loop(ev_path)
+      handed_off = self._open_evdev(ev_path)
 
     except OSError as exc:
       if exc.errno == 19:
@@ -145,16 +178,16 @@ class XboxInputService:
       traceback.print_exc()
     finally:
       with self._lock:
-        self.connected = False
-        self.drive = None
         self.busy = False
-        if self.status.startswith("Erreur") or self.status in (
-          "Connecting...", "Scan BLE (hold sync)...", "Pairing...",
-        ):
-          self.status = "Ready"
-      if self._reader is not None:
-        self._reader.close()
-        self._reader = None
+        if not handed_off:
+          self.connected = False
+          self.drive = None
+          if self.status.startswith("Erreur") or self.status in (
+            "Connecting...", "Scan BLE (hold sync)...", "Pairing...",
+          ):
+            self.status = "Ready"
+      if not handed_off:
+        self._close_reader()
 
   def _wait_for_input(self):
     self._set_status("Waiting Xbox input...")
@@ -176,14 +209,14 @@ class XboxInputService:
     except OSError:
       return False
 
-  def _run_evdev_loop(self, ev_path):
-    self._reader = None
+  def _open_evdev(self, ev_path):
+    reader = None
     for attempt in range(20):
       if self._stop.is_set():
-        return
+        return False
       try:
-        self._reader = EvdevReader(ev_path, self._config_store.get())
-        self._reader.open()
+        reader = EvdevReader(ev_path, self._config_store.get())
+        reader.open()
         break
       except OSError as exc:
         if exc.errno != 19:
@@ -193,33 +226,18 @@ class XboxInputService:
         ev_path = self._finder.find_xbox_event() or ev_path
     else:
       self._set_status("Input open failed")
-      return
+      return False
 
-    self._set_connected(True)
-    self._set_status("Connected — drive")
-    self._update_drive()
-    print(f"input: {ev_path}")
-
-    last_dbg = time.ticks_ms()
-    while not self._stop.is_set():
-      try:
-        if self._reader.wait_and_poll(0.05):
-          self._update_drive()
-      except OSError as exc:
-        if exc.errno == 19:
-          self._set_status("Controller disconnected")
-          break
-        raise
-
-      now = time.ticks_ms()
-      if now - last_dbg >= 3000:
-        s = self._reader.state
-        d = self._mapper.compute(s)
-        print(
-          f"evdev alive events={self._reader.event_count}"
-          f" abs={self._reader._abs_event_count}"
-          f" lx={s.left_x} ly={s.left_y} rx={s.right_x} ry={s.right_y}"
-          f" lt={s.lt} rt={s.rt}"
-          f" drive F={d.axis_y} C={d.axis_x} R={d.axis_rot}"
-        )
-        last_dbg = now
+    with self._lock:
+      self._reader = reader
+      self._handoff = True
+      self.connected = True
+      self.status = "Connected — drive"
+    reader.drain_available()
+    live = reader.state.copy()
+    drive = self._mapper.compute(live)
+    with self._lock:
+      self.state = live
+      self.drive = drive
+    print(f"input: {ev_path} (main-loop poll)")
+    return True
