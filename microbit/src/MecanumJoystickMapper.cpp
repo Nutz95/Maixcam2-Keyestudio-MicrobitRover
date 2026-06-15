@@ -37,19 +37,25 @@ uint8_t MecanumJoystickMapper::deadzone_percent() const {
     return _deadzone_percent;
 }
 
-void MecanumJoystickMapper::drive(MecanumCarDriver& car, int16_t axis_x, int16_t axis_y, uint8_t max_speed) const {
+void MecanumJoystickMapper::drive(
+    MecanumCarDriver& car,
+    int16_t axis_x,
+    int16_t axis_y,
+    int16_t axis_rot,
+    uint8_t max_speed) const {
     const int16_t x = normalize_axis(axis_x);
     const int16_t y = normalize_axis(static_cast<int16_t>(-axis_y));
+    const int16_t r = normalize_axis(axis_rot);
 
-    if (x == 0 && y == 0) {
+    if (x == 0 && y == 0 && r == 0) {
         car.stop();
         return;
     }
 
-    const int32_t upper_left = static_cast<int32_t>(y) + x;
-    const int32_t upper_right = static_cast<int32_t>(y) - x;
-    const int32_t lower_left = static_cast<int32_t>(y) - x;
-    const int32_t lower_right = static_cast<int32_t>(y) + x;
+    const int32_t upper_left = static_cast<int32_t>(y) + x + r;
+    const int32_t upper_right = static_cast<int32_t>(y) - x - r;
+    const int32_t lower_left = static_cast<int32_t>(y) - x + r;
+    const int32_t lower_right = static_cast<int32_t>(y) + x - r;
 
     int32_t max_magnitude = labs(upper_left);
     max_magnitude = max_i32(max_magnitude, labs(upper_right));
@@ -60,11 +66,14 @@ void MecanumJoystickMapper::drive(MecanumCarDriver& car, int16_t axis_x, int16_t
         return;
     }
 
+    int32_t input_mag = max_i32(max_i32(labs(x), labs(y)), labs(r));
+    int32_t effective = (static_cast<int32_t>(max_speed) * input_mag) / kAxisMax;
+
     car.drive_signed(
-        clamp_signed_speed((upper_left * max_speed) / max_magnitude),
-        clamp_signed_speed((upper_right * max_speed) / max_magnitude),
-        clamp_signed_speed((lower_left * max_speed) / max_magnitude),
-        clamp_signed_speed((lower_right * max_speed) / max_magnitude));
+        clamp_signed_speed((upper_left * effective) / max_magnitude),
+        clamp_signed_speed((upper_right * effective) / max_magnitude),
+        clamp_signed_speed((lower_left * effective) / max_magnitude),
+        clamp_signed_speed((lower_right * effective) / max_magnitude));
 }
 
 int16_t MecanumJoystickMapper::normalize_axis(int16_t axis) const {

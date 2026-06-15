@@ -20,16 +20,20 @@ Doc Sipeed : https://wiki.sipeed.com/maixpy/doc/en/modules/bluetooth.html
 | `maixcam_joystick_pad.py` | Pad tactile -> UART rover |
 | `maixcam_test_rover.py` | Boutons de mouvements discrets |
 
-## Manette Xbox
+## Deploiement MaixCam
 
-`maixcam_xbox_rover.py` / `bluetooth_connect.py` :
+```powershell
+cd tools
+.\deploy_rover_mecanum.ps1
+```
 
-1. `bluetoothctl` : agent + `info` + `trust` + `connect`
-2. Lecture stick via `/dev/input/event*` (evdev) ou `/dev/input/js*`
-3. Fallback bleak seulement si aucun peripherique input Xbox detecte
+Installe dans `/root/roverMecanum/` (config, lib, script principal).
 
-Sur MaixCam2, seuls `event0/1/2` existent souvent (pas de `js0`). Le script
-cherche le device dont le nom sysfs contient `Xbox` / `Microsoft`.
+Voir `maixcam/roverMecanum/README.md` pour le mapping manette.
+
+## Manette Xbox (legacy scripts)
+
+`maixcam_xbox_rover.py` dans `roverMecanum/` remplace l'ancien monolithe.
 Ne jamais `bluetoothctl disconnect` (eteint la manette).
 
 Sans pairing chiffre, seuls les services Microsoft/batterie sont visibles

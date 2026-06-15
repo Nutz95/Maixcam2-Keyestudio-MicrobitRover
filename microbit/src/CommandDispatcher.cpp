@@ -47,8 +47,8 @@ void CommandDispatcher::execute_raw(uint8_t wheel_dirs, uint8_t speed) {
     _car.drive_raw(wheel_dirs, speed);
 }
 
-void CommandDispatcher::execute_joystick(int16_t axis_x, int16_t axis_y, uint8_t max_speed) {
-    _joystick_mapper.drive(_car, axis_x, axis_y, max_speed);
+void CommandDispatcher::execute_joystick(int16_t axis_x, int16_t axis_y, int16_t axis_rot, uint8_t max_speed) {
+    _joystick_mapper.drive(_car, axis_x, axis_y, axis_rot, max_speed);
 }
 
 const char* CommandDispatcher::command_name(uint8_t command) const {

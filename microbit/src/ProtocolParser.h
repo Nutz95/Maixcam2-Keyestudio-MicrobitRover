@@ -17,6 +17,8 @@ enum RxState {
     WAIT_JOY_X_HI,
     WAIT_JOY_Y_LO,
     WAIT_JOY_Y_HI,
+    WAIT_JOY_R_LO,
+    WAIT_JOY_R_HI,
     WAIT_JOY_MAX_SPEED,
     WAIT_JOY_CHECKSUM,
 };
@@ -30,6 +32,8 @@ struct RxContext {
     uint8_t joy_x_hi = 0;
     uint8_t joy_y_lo = 0;
     uint8_t joy_y_hi = 0;
+    uint8_t joy_r_lo = 0;
+    uint8_t joy_r_hi = 0;
 };
 
 class ProtocolHandler {
@@ -100,6 +104,16 @@ public:
 
             case WAIT_JOY_Y_HI:
                 ctx.joy_y_hi = byte;
+                ctx.state = WAIT_JOY_R_LO;
+                break;
+
+            case WAIT_JOY_R_LO:
+                ctx.joy_r_lo = byte;
+                ctx.state = WAIT_JOY_R_HI;
+                break;
+
+            case WAIT_JOY_R_HI:
+                ctx.joy_r_hi = byte;
                 ctx.state = WAIT_JOY_MAX_SPEED;
                 break;
 
@@ -110,7 +124,8 @@ public:
 
             case WAIT_JOY_CHECKSUM:
                 if (byte == joystick_checksum(ctx)) {
-                    _dispatcher.execute_joystick(joystick_x(ctx), joystick_y(ctx), ctx.speed);
+                    _dispatcher.execute_joystick(
+                        joystick_x(ctx), joystick_y(ctx), joystick_r(ctx), ctx.speed);
                     send_ack(reply_port, CMD_JOYSTICK);
                     log_command(CMD_JOYSTICK, ctx.speed, src);
                 }
@@ -137,7 +152,8 @@ private:
     uint8_t joystick_checksum(const RxContext& ctx) const {
         return static_cast<uint8_t>(
             (PROTO_SYNC + CMD_JOYSTICK + ctx.joy_x_lo + ctx.joy_x_hi +
-             ctx.joy_y_lo + ctx.joy_y_hi + ctx.speed) & 0xFF);
+             ctx.joy_y_lo + ctx.joy_y_hi + ctx.joy_r_lo + ctx.joy_r_hi +
+             ctx.speed) & 0xFF);
     }
 
     int16_t joystick_x(const RxContext& ctx) const {
@@ -150,5 +166,11 @@ private:
         return static_cast<int16_t>(
             static_cast<uint16_t>(ctx.joy_y_lo) |
             (static_cast<uint16_t>(ctx.joy_y_hi) << 8U));
+    }
+
+    int16_t joystick_r(const RxContext& ctx) const {
+        return static_cast<int16_t>(
+            static_cast<uint16_t>(ctx.joy_r_lo) |
+            (static_cast<uint16_t>(ctx.joy_r_hi) << 8U));
     }
 };

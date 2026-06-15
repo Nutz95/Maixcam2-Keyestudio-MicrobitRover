@@ -145,7 +145,9 @@ Mouvements courants en une seule commande :
 | `0x0A` | SPIN_RIGHT | Rotation sur place (sens horaire) |
 | `0x0B` | PIVOT_RIGHT | Pivot autour du côté droit |
 | `0x0C` | PIVOT_REAR | Pivot autour de l'axe arrière |
-| `0x30` | JOYSTICK | Axes analogiques X/Y + vitesse max |
+| `0x30` | JOYSTICK | Axes analogiques strafe / forward / rotation |
+
+Documentation détaillée : **[microbit/PROTOCOL.md](microbit/PROTOCOL.md)**
 
 ### Trame RAW mécanum (5 octets)
 
@@ -172,22 +174,18 @@ Tout mouvement mécanum possible en une seule trame :
 | `10` | Arrière |
 | `11` | Réservé (traité comme stop) |
 
-### Trame joystick analogique (8 octets)
+### Trame joystick analogique (10 octets)
 
-Pour piloter le rover avec un joystick analogique gauche type Xbox :
+Voir **[microbit/PROTOCOL.md](microbit/PROTOCOL.md)** pour le détail complet (mixer 3 axes, checksum, exemples).
 
 ```
-[0xAA] [0x30] [X_LO] [X_HI] [Y_LO] [Y_HI] [MAX_SPEED] [CHECKSUM]
+[0xAA] [0x30] [X_LO] [X_HI] [Y_LO] [Y_HI] [R_LO] [R_HI] [MAX_SPEED] [CHECKSUM]
 ```
 
-- `X` / `Y` : `int16` little-endian, plage Xbox centrée `-32768..32767`
-- `X > 0` : déplacement vers la droite
-- `Y < 0` : déplacement vers l'avant (coordonnées écran / HID)
-- `MAX_SPEED` : vitesse PWM maximale `0..255`
-- `CHECKSUM` = somme des 7 premiers octets `& 0xFF`
-- Deadzone par défaut : `12%`, comme le dashboard SoArm101
-
-Le firmware transforme ensuite les axes en vitesses indépendantes pour les 4 roues mécanum.
+- `X` : strafe (crab), `Y` : forward (`Y < 0` = avant), `R` : rotation
+- `MAX_SPEED` : plafond PWM `0..255`
+- Deadzone par défaut : **2 %** (`DEFAULT_JOYSTICK_DEADZONE_PERCENT`)
+- Vitesse proportionnelle à l’amplitude des sticks (pas de plein gaz sur une légère poussée)
 
 ### Exemples
 
