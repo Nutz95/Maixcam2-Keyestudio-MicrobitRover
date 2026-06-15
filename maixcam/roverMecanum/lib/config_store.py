@@ -2,37 +2,67 @@ import json
 import os
 
 from lib.config_defaults import default_config
-from lib.paths import CONFIG_PATH
+from lib.paths import resolve_config_path
 
 
 class ConfigStore:
-  """Charge et sauvegarde config.json sous /root/roverMecanum."""
+  """
+  Load and persist config.json.
 
-  def __init__(self, path=CONFIG_PATH):
-    self.path = path
+  The file is resolved at runtime (see resolve_config_path). Editing the repo
+  config.json has no effect on the device until it is copied to the MaixCam
+  (deploy -SyncConfig or manual scp).
+  """
+
+  def __init__(self, path=None):
+    self._explicit_path = path
+    self.path = path or resolve_config_path()
     self._data = None
+    self._mtime = 0
 
   def load(self):
+    """Read config from disk; merge missing keys from defaults."""
+    self.path = self._explicit_path or resolve_config_path()
     if not os.path.isfile(self.path):
+      print(f"config: no file at {self.path}, creating defaults")
       self._data = default_config()
       self.save()
+      self._mtime = os.path.getmtime(self.path)
       return self._data
 
     with open(self.path, "r") as f:
       self._data = json.load(f)
     self._merge_defaults()
+    self._mtime = os.path.getmtime(self.path)
+    return self._data
+
+  def reload_if_changed(self):
+    """Reload from disk when the file was modified (hot-tune on device)."""
+    path = self._explicit_path or resolve_config_path()
+    if not os.path.isfile(path):
+      return self.get()
+    mtime = os.path.getmtime(path)
+    if self._data is None or mtime != self._mtime or path != self.path:
+      self.path = path
+      return self.load()
     return self._data
 
   def save(self):
-    os.makedirs(os.path.dirname(self.path), exist_ok=True)
+    os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
     with open(self.path, "w") as f:
       json.dump(self._data, f, indent=2)
       f.write("\n")
+    if os.path.isfile(self.path):
+      self._mtime = os.path.getmtime(self.path)
 
   def get(self):
     if self._data is None:
       self.load()
     return self._data
+
+  def rover_settings(self):
+    """Return rover tuning block (always from latest in-memory config)."""
+    return dict(self.get().get("rover", {}))
 
   def set_controller_mac(self, mac):
     data = self.get()
@@ -43,6 +73,18 @@ class ConfigStore:
     data = self.get()
     data["controller_mac"] = ""
     self.save()
+
+  def log_rover_settings(self):
+    rover = self.rover_settings()
+    print(
+      "config:"
+      f" path={self.path}"
+      f" max_speed={rover.get('max_speed', 255)}"
+      f" deadzone={rover.get('deadzone_percent', 2)}%"
+      f" curve={rover.get('axis_curve', 'expo')}"
+      f" sensitivity={rover.get('axis_sensitivity_percent', 100)}%"
+      f" send_ms={rover.get('send_interval_ms', 30)}"
+    )
 
   def _merge_defaults(self):
     base = default_config()

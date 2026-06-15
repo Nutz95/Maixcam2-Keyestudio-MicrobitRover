@@ -1,8 +1,9 @@
+from lib.axis_curve import apply_curve
 from lib.protocol_constants import PRESET_ACTIONS
 
 
 class DriveOutput:
-  """Sortie mapping -> commande rover (4 axes + preset optionnel)."""
+  """Mapped stick/trigger values ready for UART (4 axes + optional preset)."""
 
   def __init__(self):
     self.axis_strafe = 0
@@ -11,29 +12,47 @@ class DriveOutput:
     self.axis_pivot = 0
     self.preset_cmd = None
 
+  def is_idle(self, threshold=250):
+    """True when all drive axes are near zero (after shaping)."""
+    return (
+      abs(self.axis_strafe) <= threshold
+      and abs(self.axis_forward) <= threshold
+      and abs(self.axis_spin) <= threshold
+      and abs(self.axis_pivot) <= threshold
+    )
+
 
 class ControllerMappingEngine:
-  """Applique config.json : sticks, gachettes, croix -> axes rover."""
+  """
+  Apply config.json mapping: sticks, triggers, d-pad -> rover drive axes.
+
+  Shaping pipeline per axis: invert -> deadzone -> response curve -> sensitivity.
+  """
 
   def __init__(self, config):
     self._config = config
 
   def update_config(self, config):
+    """Refresh mapping rules (call after config reload)."""
     self._config = config
 
   def compute(self, state):
+    """Build DriveOutput from a ControllerState snapshot."""
     out = DriveOutput()
     mapping = self._config.get("mapping", {})
     axes_map = mapping.get("axes", {})
     invert = mapping.get("invert", {})
     rover = self._config.get("rover", {})
     deadzone = int(32768 * rover.get("deadzone_percent", 2) / 100)
+    sensitivity = max(1, min(100, int(rover.get("axis_sensitivity_percent", 70)))) / 100.0
+    expo = max(0.3, min(3.0, float(rover.get("axis_expo", 2.2))))
+    curve = rover.get("axis_curve", "expo")
 
     dpad = self._dpad_axes(state, mapping.get("dpad", {}))
     if dpad is not None:
       out.axis_strafe, out.axis_forward = dpad
-      out.axis_strafe = self._apply_deadzone(out.axis_strafe, deadzone)
-      out.axis_forward = self._apply_deadzone(out.axis_forward, deadzone)
+      out.axis_strafe = self._shape_axis(out.axis_strafe, deadzone, sensitivity, expo, curve)
+      out.axis_forward = self._shape_axis(out.axis_forward, deadzone, sensitivity, expo, curve)
       preset = self._button_preset(state)
       if preset is not None:
         out.preset_cmd = preset
@@ -54,10 +73,10 @@ class ControllerMappingEngine:
     spin = self._apply_invert(spin, spin_src, invert)
     pivot = self._apply_invert(pivot, pivot_src, invert)
 
-    out.axis_forward = self._apply_deadzone(forward, deadzone)
-    out.axis_strafe = self._apply_deadzone(strafe, deadzone)
-    out.axis_spin = self._apply_deadzone(spin, deadzone)
-    out.axis_pivot = self._apply_deadzone(pivot, deadzone)
+    out.axis_forward = self._shape_axis(forward, deadzone, sensitivity, expo, curve)
+    out.axis_strafe = self._shape_axis(strafe, deadzone, sensitivity, expo, curve)
+    out.axis_spin = self._shape_axis(spin, deadzone, sensitivity, expo, curve)
+    out.axis_pivot = self._shape_axis(pivot, deadzone, sensitivity, expo, curve)
 
     preset = self._button_preset(state)
     if preset is not None:
@@ -98,6 +117,17 @@ class ControllerMappingEngine:
     mag = abs(value) - deadzone
     span = max(1, 32767 - deadzone)
     return sign * min(32767, int(mag * 32767 / span))
+
+  def _shape_axis(self, value, deadzone, sensitivity, expo, curve):
+    """Deadzone, response curve (log/expo/linear), then sensitivity scale."""
+    value = self._apply_deadzone(value, deadzone)
+    if value == 0:
+      return 0
+    sign = 1 if value > 0 else -1
+    norm = min(1.0, abs(value) / 32767.0)
+    norm = apply_curve(norm, curve, expo)
+    norm = min(1.0, norm * sensitivity)
+    return sign * int(norm * 32767)
 
   def _dpad_axes(self, state, dpad_map):
     if not dpad_map:
@@ -150,13 +180,14 @@ class ControllerMappingEngine:
 
   def _button_preset(self, state):
     buttons = self._config.get("mapping", {}).get("buttons", {})
-    edges = state.consume_edges()
+    preset = None
     for btn_name, action in buttons.items():
-      if not edges.get(btn_name):
-        continue
       if not action:
         continue
+      if not state.pressed_edge.get(btn_name):
+        continue
+      state.pressed_edge.pop(btn_name, None)
       cmd = PRESET_ACTIONS.get(action)
       if cmd is not None:
-        return cmd
-    return None
+        preset = cmd
+    return preset

@@ -13,7 +13,8 @@ param(
     [string]$RemotePath = "/root/roverMecanum",
     [string]$KeyType = "ed25519",
     [switch]$DeployOnly,
-    [switch]$SshOnly
+    [switch]$SshOnly,
+    [switch]$SyncConfig
 )
 
 $ErrorActionPreference = "Stop"
@@ -164,12 +165,16 @@ function Deploy-Package {
     if ($exitCode -ne 0) { throw "scp lib failed" }
 
     $configExitCode = Invoke-Ssh "test -f '$RemotePath/config.json'"
-    if ($configExitCode -ne 0) {
-        Write-Host "config.json missing on target -> uploading"
+    if ($configExitCode -ne 0 -or $SyncConfig) {
+        if ($SyncConfig) {
+            Write-Host "SyncConfig -> uploading config.json (overwrites remote)"
+        } else {
+            Write-Host "config.json missing on target -> uploading"
+        }
         $exitCode = Invoke-Scp "$LocalPackage\config.json" "${Target}:${RemotePath}/"
         if ($exitCode -ne 0) { throw "scp config failed" }
     } else {
-        Write-Host "Remote config.json kept (not overwritten)"
+        Write-Host "Remote config.json kept (use -SyncConfig to overwrite from repo)"
     }
 
     Write-Step "Remote verification"

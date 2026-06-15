@@ -1,6 +1,18 @@
 import os
 
-from lib.evdev_constants import ABS_BRAKE, ABS_GAS, ABS_RZ, ABS_Z
+from lib.evdev_constants import ABS_BRAKE, ABS_GAS, ABS_RX, ABS_RY, ABS_RZ, ABS_X, ABS_Y, ABS_Z
+
+# Linux input subsystem ABS_* names for sysfs paths.
+_ABS_LINUX_NAMES = {
+  ABS_X: "x",
+  ABS_Y: "y",
+  ABS_Z: "z",
+  ABS_RX: "rx",
+  ABS_RY: "ry",
+  ABS_RZ: "rz",
+  ABS_GAS: "gas",
+  ABS_BRAKE: "brake",
+}
 
 
 class EvdevSysfsReader:
@@ -36,6 +48,25 @@ class EvdevSysfsReader:
           max_v = int(self._read_text(f"{root}/{rel}/max"))
           flat = int(self._read_text(f"{root}/{rel}/flat"))
           return min_v, max_v, flat
+        except (OSError, ValueError):
+          pass
+    return None
+
+  def read_abs_value(self, event_path, axis_code):
+    """Read the kernel's current axis value (fallback when ioctl unavailable)."""
+    name = _ABS_LINUX_NAMES.get(axis_code)
+    for root in self._device_roots(event_path):
+      rels = [
+        f"abs/{axis_code:02x}/value",
+        f"abs/{axis_code}/value",
+        f"absinfo/{axis_code}/value",
+        f"absinfo/{axis_code:02x}/value",
+      ]
+      if name:
+        rels.extend([f"abs/ABS_{name.upper()}/value", f"abs/{name}/value"])
+      for rel in rels:
+        try:
+          return int(self._read_text(f"{root}/{rel}"))
         except (OSError, ValueError):
           pass
     return None

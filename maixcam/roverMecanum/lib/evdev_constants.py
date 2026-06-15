@@ -1,46 +1,66 @@
-"""Linux evdev axis codes used by Xbox controllers."""
+"""
+Linux evdev type/code constants for Xbox controllers.
 
-EV_SYN = 0x00
-EV_KEY = 0x01
-EV_ABS = 0x03
+These match <linux/input-event-codes.h>. We use them when parsing
+/dev/input/event* binary records from BlueZ HID devices.
+"""
+
+# --- Event types -----------------------------------------------------------
+
+EV_SYN = 0x00   # Synchronization event (end of a report)
+EV_KEY = 0x01   # Digital button press/release
+EV_ABS = 0x03   # Absolute axis (sticks, triggers, hat)
+
+# SYN_REPORT marks the end of one hardware input report.
 SYN_REPORT = 0
 
-ABS_X = 0x00
-ABS_Y = 0x01
-ABS_Z = 0x02
-ABS_RX = 0x03
-ABS_RY = 0x04
-ABS_RZ = 0x05
-ABS_HAT0X = 0x10
-ABS_HAT0Y = 0x11
-ABS_GAS = 0x09
-ABS_BRAKE = 0x0A
+# --- Absolute axis codes (ABS_*) -------------------------------------------
 
+ABS_X = 0x00      # Left stick horizontal
+ABS_Y = 0x01      # Left stick vertical
+ABS_Z = 0x02      # Often left trigger (layout-dependent)
+ABS_RX = 0x03     # Right stick horizontal
+ABS_RY = 0x04     # Right stick vertical
+ABS_RZ = 0x05     # Often right trigger (layout-dependent)
+ABS_HAT0X = 0x10  # D-pad horizontal (-1, 0, +1)
+ABS_HAT0Y = 0x11  # D-pad vertical (-1, 0, +1)
+ABS_GAS = 0x09    # Accelerator / RT on some drivers
+ABS_BRAKE = 0x0A  # Brake / LT on some drivers
+
+# Normalized stick range sent to the mapping engine.
 AXIS_MAX = 32767
+
+# Microsoft USB vendor id (045e) — used to spot Xbox pads in /sys.
 XBOX_VENDOR_ID = "045e"
 
-# All axis codes we may probe on Xbox gamepads.
+# Axis codes probed when auto-detecting stick/trigger layout.
 XBOX_AXIS_CODES = (
   ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ,
   ABS_HAT0X, ABS_HAT0Y, ABS_GAS, ABS_BRAKE,
 )
 
+# --- Button codes (BTN_*) --------------------------------------------------
+
 BTN_A = 0x130
 BTN_B = 0x131
 BTN_X = 0x133
 BTN_Y = 0x134
-BTN_TL = 0x136
-BTN_TR = 0x137
-BTN_TL2 = 0x138
-BTN_TR2 = 0x139
+BTN_TL = 0x136       # Left bumper (LB)
+BTN_TR = 0x137       # Right bumper (RB)
+BTN_TL2 = 0x138      # Left trigger as digital button (some BT stacks)
+BTN_TR2 = 0x139      # Right trigger as digital button
+BTN_THUMBL = 0x13C   # Alternate LB code on some Xbox BT drivers
+BTN_THUMBR = 0x13D   # Alternate RB code on some Xbox BT drivers
 BTN_SELECT = 0x13A
 BTN_START = 0x13B
 
+# Linux input framework D-pad buttons (alternative to ABS_HAT0X/Y).
 BTN_DPAD_UP = 0x220
 BTN_DPAD_DOWN = 0x221
 BTN_DPAD_LEFT = 0x222
 BTN_DPAD_RIGHT = 0x223
 
+# Map evdev button code -> logical name used in config.json "buttons".
 BTN_NAME_BY_CODE = {
   BTN_A: "btn_a",
   BTN_B: "btn_b",
@@ -48,6 +68,8 @@ BTN_NAME_BY_CODE = {
   BTN_Y: "btn_y",
   BTN_TL: "btn_lb",
   BTN_TR: "btn_rb",
+  BTN_THUMBL: "btn_lb",
+  BTN_THUMBR: "btn_rb",
   BTN_TL2: "btn_lt",
   BTN_TR2: "btn_rt",
   BTN_SELECT: "btn_select",

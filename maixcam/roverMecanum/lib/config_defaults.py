@@ -17,7 +17,11 @@ def default_config():
         "rover": {
             "max_speed": 255,
             "send_interval_ms": 30,
-            "deadzone_percent": 2,
+            "deadzone_percent": 5,
+            "axis_sensitivity_percent": 70,
+            "axis_expo": 2.2,
+            "axis_curve": "expo",
+            "speed_step": 5,
             "wait_ack": False,
         },
         "mapping": {

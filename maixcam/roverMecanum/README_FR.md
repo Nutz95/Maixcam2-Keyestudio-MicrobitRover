@@ -2,7 +2,38 @@
 
 Installation sur la caméra : `/root/roverMecanum/`
 
-Déploiement Windows : `tools/deploy_rover_mecanum.ps1`
+Déploiement Windows : `tools/deploy_rover_mecanum.ps1`  
+Pour pousser **config.json** du repo vers la caméra : `.\deploy_rover_mecanum.ps1 -SyncConfig`
+
+## Fichier config.json — où le modifier ?
+
+| Emplacement | Utilisé quand |
+|-------------|---------------|
+| `/root/roverMecanum/config.json` | **C'est celui lu en production** (après deploy) |
+| `./config.json` (cwd MaixVision) | Prioritaire si présent (`/tmp/maixpy_run/config.json`) |
+| `maixcam/roverMecanum/config.json` (repo) | Source à copier avec `-SyncConfig` ou scp manuel |
+
+Au démarrage, la console affiche :  
+`config: path=... max_speed=... deadzone=...% sensitivity=...% expo=...`
+
+Le fichier est **rechargé à chaud** si tu le modifies sur la MaixCam (sans redémarrer).
+
+## Réglages manette / rover (`rover`)
+
+| Clé | Défaut | Effet |
+|-----|--------|-------|
+| `max_speed` | `255` | Plafond moteur 0–255 (byte UART, appliqué en direct) |
+| `deadzone_percent` | `5` | Zone morte sticks/gâchettes côté MaixCam |
+| `axis_sensitivity_percent` | `100` | Gain global 1–100 % après deadzone |
+| `axis_curve` | `expo` | `expo` (défaut, doux), `linear`, `log` |
+| `axis_expo` | `2.2` | Exposant si `axis_curve` = `expo` (>1 = centre plus doux) |
+| `axis_sensitivity_percent` | `70` | Gain global après deadzone |
+| `speed_step` | `5` | Pas LB/RB sur la jauge vitesse (± sur max_speed) |
+| `send_interval_ms` | `30` | Période envoi UART |
+
+LB/RB en jeu : jauge **SPD xx%** en haut de l'écran (RB +, LB −).
+
+Exemple rover lent et doux : `"max_speed": 80, "axis_expo": 1.8, "axis_sensitivity_percent": 70`
 
 Protocole UART (Little Endian, trame 12 octets) : [`../../microbit/PROTOCOL_FR.md`](../../microbit/PROTOCOL_FR.md)
 

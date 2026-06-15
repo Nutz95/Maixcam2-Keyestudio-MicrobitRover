@@ -12,13 +12,19 @@ from lib.xbox_input_service import XboxInputService
 
 
 class XboxRoverApp:
-  """Control loop (UART + touch) and separate display thread for camera HUD."""
+  """
+  Main application: Xbox input (main loop), UART drive, camera HUD (threads).
+
+  Control loop runs evdev poll + UART at high rate; display/camera are paced.
+  """
 
   TOUCH_DEBOUNCE_MS = 900
+  SPEED_DEBOUNCE_MS = 160
 
   def __init__(self):
     self._config_store = ConfigStore()
     self._config = self._config_store.load()
+    self._config_store.log_rover_settings()
     rover_cfg = self._config.get("rover", {})
     cam_cfg = self._config.get("camera", {})
     display_fps = max(1, min(30, int(cam_cfg.get("display_fps", 15))))
@@ -42,8 +48,15 @@ class XboxRoverApp:
     self._was_busy = False
     self._camera = None
     self._shutdown_done = False
+    self._was_driving = False
+    rover_cfg = self._config.get("rover", {})
+    self._config_max_speed = int(rover_cfg.get("max_speed", 255))
+    self._session_max_speed = self._config_max_speed
+    self._speed_step = int(rover_cfg.get("speed_step", 5))
+    self._last_speed_change_ms = 0
 
   def run(self):
+    """Start camera/display threads and run the UART + input control loop."""
     BluetoothInstaller().install()
     self._start_camera()
 
@@ -55,7 +68,9 @@ class XboxRoverApp:
 
     try:
       while not app.need_exit() and not self._exit.is_set():
+        self._apply_rover_config()
         self._xbox.poll()
+        self._handle_speed_bumpers()
         self._read_touch()
         self._handle_touch()
         self._on_connection_change()
@@ -67,12 +82,48 @@ class XboxRoverApp:
           send_ms = now
         elif was_connected and not connected:
           self._rover.send_stop()
+          self._was_driving = False
 
         was_connected = connected
         time.sleep_ms(1)
     finally:
       self.shutdown()
       display_thread.join(timeout=1.0)
+
+  def _apply_rover_config(self):
+    """Hot-reload rover tuning; session max_speed only resets if config file changes."""
+    self._config_store.reload_if_changed()
+    rover_cfg = self._config_store.rover_settings()
+    file_max = int(rover_cfg.get("max_speed", 255))
+    if file_max != self._config_max_speed:
+      self._config_max_speed = file_max
+      self._session_max_speed = file_max
+    self._speed_step = int(rover_cfg.get("speed_step", 5))
+    self._send_interval = rover_cfg.get("send_interval_ms", 30)
+    self._rover.set_max_speed(self._session_max_speed)
+
+  def _handle_speed_bumpers(self):
+    """LB = slower, RB = faster (adjusts session max_speed, shown in HUD)."""
+    _status, connected, _busy, _state, _drive = self._xbox.snapshot()
+    if not connected:
+      return
+    lb, rb = self._xbox.consume_speed_edges()
+    if not lb and not rb:
+      return
+    now = time.ticks_ms()
+    if now - self._last_speed_change_ms < self.SPEED_DEBOUNCE_MS:
+      return
+    changed = False
+    if lb:
+      self._session_max_speed = max(10, self._session_max_speed - self._speed_step)
+      changed = True
+    if rb:
+      self._session_max_speed = min(255, self._session_max_speed + self._speed_step)
+      changed = True
+    if changed:
+      self._last_speed_change_ms = now
+      self._rover.set_max_speed(self._session_max_speed)
+      print(f"speed: {int(self._session_max_speed * 100 / 255)}% ({self._session_max_speed}/255)")
 
   def _display_loop(self):
     last_draw = 0
@@ -124,7 +175,7 @@ class XboxRoverApp:
       frame = image.Image(self._disp.width(), self._disp.height(), bg=image.COLOR_BLACK)
 
     _status, connected, busy, state, drive = self._xbox.snapshot()
-    self._ui.draw_overlay(frame, connected, busy, state, drive)
+    self._ui.draw_overlay(frame, connected, busy, state, drive, self._session_max_speed)
     self._disp.show(frame)
 
   def _read_touch(self):
@@ -179,6 +230,11 @@ class XboxRoverApp:
   def _send_drive(self, drive):
     if drive.preset_cmd is not None:
       self._rover.send_preset(drive.preset_cmd)
+      self._was_driving = True
+      return
+    if drive.is_idle():
+      self._rover.send_stop()
+      self._was_driving = False
       return
     self._rover.send_joystick(
       drive.axis_strafe,
@@ -186,6 +242,7 @@ class XboxRoverApp:
       drive.axis_spin,
       drive.axis_pivot,
     )
+    self._was_driving = True
 
   def _in_rect(self, x, y, rect):
     return rect[0] <= x < rect[0] + rect[2] and rect[1] <= y < rect[1] + rect[3]

@@ -5,8 +5,10 @@ from lib.controller_state import ControllerState
 from lib.evdev_axis_mapper import EvdevAxisMapper, EvdevTriggerMapper
 from lib.evdev_constants import (
   ABS_HAT0X, ABS_HAT0Y, BTN_DPAD_DOWN, BTN_DPAD_LEFT, BTN_DPAD_RIGHT, BTN_DPAD_UP,
-  BTN_NAME_BY_CODE, BTN_TL2, BTN_TR2, EV_ABS, EV_KEY, EV_SYN, SYN_REPORT,
+  BTN_NAME_BY_CODE, BTN_THUMBL, BTN_THUMBR, BTN_TL, BTN_TL2, BTN_TR, BTN_TR2,
+  EV_ABS, EV_KEY, EV_SYN, SYN_REPORT,
 )
+from lib.evdev_ioctl import read_absinfo
 from lib.evdev_sysfs_reader import EvdevSysfsReader
 from lib.evdev_xbox_layout import XboxAxisLayout
 
@@ -38,6 +40,20 @@ class EvdevReader:
 
   def open(self):
     self._file = open(self.event_path, "rb")
+    self._init_mappers()
+
+  def _init_mappers(self):
+    """Create axis mappers up front so kernel sync always has a target."""
+    layout = self._layout
+    trigger_codes = {layout.lt, layout.rt}
+    for code in (layout.left_x, layout.left_y, layout.right_x, layout.right_y, layout.lt, layout.rt):
+      info = read_absinfo(self._file, code)
+      if info is not None:
+        raw = info[0]
+      else:
+        min_v, max_v, flat = self._axis_range(code, code in trigger_codes)
+        raw = (min_v + max_v) // 2
+      self._ensure_mapper(code, raw)
 
   def close(self):
     if self._file is not None:
@@ -67,6 +83,46 @@ class EvdevReader:
       self._process_event(data)
       count += 1
     return count
+
+  def poll_inputs(self):
+    """
+    One input frame: events for buttons, then kernel ABS truth for sticks.
+
+    Axes are read via EVIOCGABS every poll so missed evdev packets cannot
+    leave sticks stuck at the last value.
+    """
+    if self._file is None:
+      return
+    self.drain_available()
+    self.sync_axes_from_kernel()
+
+  def sync_axes_from_kernel(self):
+    """Force stick/trigger state from kernel (ioctl, then sysfs fallback)."""
+    layout = self._layout
+    trigger_codes = {layout.lt, layout.rt}
+    for code in (layout.left_x, layout.left_y, layout.right_x, layout.right_y, layout.lt, layout.rt):
+      info = read_absinfo(self._file, code)
+      if info is not None:
+        raw, min_v, max_v, flat = info
+        self._ensure_mapper_with_range(code, raw, min_v, max_v, flat, code in trigger_codes)
+        continue
+      val = self._sysfs.read_abs_value(self.event_path, code)
+      if val is not None:
+        self._feed_abs(code, val)
+    self._sync_axes()
+
+  def _ensure_mapper_with_range(self, code, raw, min_v, max_v, flat, prefer_trigger):
+    mapper = self._mappers.get(code)
+    if mapper is None:
+      if prefer_trigger and max_v - min_v > 1024:
+        prefer_trigger = False
+      mapper = (
+        EvdevTriggerMapper(min_v, max_v, flat)
+        if prefer_trigger
+        else EvdevAxisMapper(min_v, max_v, flat, invert=False)
+      )
+      self._mappers[code] = mapper
+    mapper.set_raw(raw)
 
   def wait_and_poll(self, timeout_sec=0.05):
     if self._file is None:
@@ -103,11 +159,10 @@ class EvdevReader:
       if self._abs_event_count <= 6:
         print(f"evdev abs code={code} raw={value}")
       self._feed_abs(code, value)
-      self._sync_axes()
     elif ev_type == EV_KEY:
       self._feed_key(code, value)
     elif ev_type == EV_SYN and code == SYN_REPORT:
-      self._sync_axes()
+      pass
 
   def _axis_range(self, code, as_trigger):
     info = self._sysfs.read_absinfo_real(self.event_path, code)
@@ -170,11 +225,18 @@ class EvdevReader:
     return 0
 
   def _feed_key(self, code, value):
+    pressed = value != 0
+    if code in (BTN_TL, BTN_THUMBL):
+      self.state.set_button("btn_lb", pressed)
+      return
+    if code in (BTN_TR, BTN_THUMBR):
+      self.state.set_button("btn_rb", pressed)
+      return
     if code == BTN_TL2:
-      self._lt_btn = 32767 if value else 0
+      self._lt_btn = 32767 if pressed else 0
       return
     if code == BTN_TR2:
-      self._rt_btn = 32767 if value else 0
+      self._rt_btn = 32767 if pressed else 0
       return
     if code == BTN_DPAD_LEFT:
       self._dpad_btn_x = -1 if value else 0

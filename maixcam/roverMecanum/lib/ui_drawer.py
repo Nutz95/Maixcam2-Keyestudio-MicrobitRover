@@ -2,7 +2,9 @@ from maix import image
 
 
 class UiDrawer:
-  """HUD minimaliste par-dessus la video plein ecran (480x640 portrait)."""
+  """Full-screen HUD overlay (480x640 portrait) for camera + controller state."""
+
+  SPEED_BAR_H = 22
 
   def __init__(self, width, height):
     self.width = width
@@ -34,7 +36,8 @@ class UiDrawer:
   def disconnect_rect(self):
     return list(self._disconnect_rect)
 
-  def draw_overlay(self, img, connected, busy, state, drive):
+  def draw_overlay(self, img, connected, busy, state, drive, max_speed=255):
+    """Draw HUD: speed bar, sticks, triggers, d-pad, connection buttons."""
     bx, by, bw, bh = self._back_pad
     img.draw_rect(bx, by, bw, bh, image.Color.from_rgb(0, 0, 0), thickness=-1)
     icon_x = bx + (bw - self._img_back.width()) // 2
@@ -43,15 +46,16 @@ class UiDrawer:
 
     if connected:
       self._draw_button(img, self.disconnect_rect(), "DISC", image.Color.from_rgb(180, 60, 40))
-      gauge_cy = self.height // 2
-      radius = min(72, (self.width - 120) // 4)
+      lb = state.buttons.get("btn_lb", False)
+      rb = state.buttons.get("btn_rb", False)
+      self._draw_speed_bar(img, max_speed, lb, rb)
+
+      gauge_cy = self.height // 2 + 8
+      radius = min(68, (self.width - 120) // 4)
       bar_h = radius * 2 + 6
       bar_y = gauge_cy - bar_h // 2
       left_cx = self.width // 4 + 4
       right_cx = self.width - self.width // 4 - 4
-
-      self._draw_bumper(img, 6, bar_y - 16, state.buttons.get("btn_lb", False), "LB")
-      self._draw_bumper(img, self.width - 34, bar_y - 16, state.buttons.get("btn_rb", False), "RB")
 
       self._draw_gauge(
         img, left_cx, gauge_cy, state.left_x, state.left_y, radius=radius, label="L",
@@ -76,6 +80,31 @@ class UiDrawer:
       self._draw_button(img, self.pair_rect(), "PAIR", image.Color.from_rgb(40, 80, 160))
       self._draw_button(img, self.connect_rect(), "CONNECT", image.Color.from_rgb(40, 120, 60))
 
+  def _draw_speed_bar(self, img, max_speed, lb_pressed, rb_pressed):
+    """Top horizontal max-speed gauge; LB/RB adjust speed in the app loop."""
+    y = 52
+    x = 54
+    w = self.width - 108
+    h = self.SPEED_BAR_H
+    pct = max(0, min(100, int(round(max_speed * 100 / 255))))
+
+    img.draw_rect(x, y, w, h, image.Color.from_rgb(20, 20, 20), thickness=-1)
+    img.draw_rect(x, y, w, h, image.COLOR_WHITE, thickness=1)
+    fill_w = max(0, int(w * pct / 100))
+    if fill_w > 0:
+      img.draw_rect(x + 1, y + 1, fill_w - 2, h - 2, image.Color.from_rgb(40, 180, 90), thickness=-1)
+
+    label = f"SPD {pct}%"
+    size = image.string_size(label, scale=1.0, thickness=1)
+    img.draw_string(x + (w - size.width()) // 2, y + 4, label, image.COLOR_WHITE, scale=1.0)
+
+    lb_c = image.Color.from_rgb(80, 200, 100) if lb_pressed else image.Color.from_rgb(35, 35, 35)
+    rb_c = image.Color.from_rgb(80, 200, 100) if rb_pressed else image.Color.from_rgb(35, 35, 35)
+    img.draw_rect(x - 30, y + 2, 26, h - 4, lb_c, thickness=-1)
+    img.draw_rect(x + w + 4, y + 2, 26, h - 4, rb_c, thickness=-1)
+    img.draw_string(x - 26, y + 5, "LB", image.COLOR_WHITE, scale=0.85)
+    img.draw_string(x + w + 8, y + 5, "RB", image.COLOR_WHITE, scale=0.85)
+
   def _draw_bottom_bar(self, img):
     y = self.height - 58
     img.draw_rect(0, y - 6, self.width, 58, image.Color.from_rgb(0, 0, 0), thickness=-1)
@@ -89,13 +118,6 @@ class UiDrawer:
     if label:
       size = image.string_size(label, scale=1.0, thickness=1)
       img.draw_string(cx - size.width() // 2, cy - radius - 14, label, image.COLOR_WHITE, scale=1.0)
-
-  def _draw_bumper(self, img, x, y, pressed, label):
-    color = image.Color.from_rgb(80, 200, 100) if pressed else image.Color.from_rgb(30, 30, 30)
-    img.draw_rect(x, y, 28, 14, color, thickness=-1)
-    img.draw_rect(x, y, 28, 14, image.COLOR_WHITE, thickness=1)
-    size = image.string_size(label, scale=0.9, thickness=1)
-    img.draw_string(x + (28 - size.width()) // 2, y + 1, label, image.COLOR_WHITE, scale=0.9)
 
   def _draw_dpad(self, img, cx, cy, dx, dy):
     r = 7

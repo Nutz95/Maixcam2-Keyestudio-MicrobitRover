@@ -5,7 +5,7 @@ from lib.preset_frame_builder import PresetFrameBuilder
 
 
 class RoverUartClient:
-  """Envoie les commandes UART vers le micro:bit."""
+  """Send UART frames to the micro:bit rover (joystick + presets)."""
 
   def __init__(self, serial, max_speed=255, wait_ack=False):
     self.serial = serial
@@ -16,9 +16,11 @@ class RoverUartClient:
     self._preset_builder = PresetFrameBuilder()
 
   def set_max_speed(self, speed):
+    """Update top motor speed byte sent in every joystick frame (0-255)."""
     self.max_speed = max(0, min(255, int(speed)))
 
   def send_joystick(self, axis_strafe, axis_forward, axis_spin=0, axis_pivot=0, speed=None):
+    """Send CMD_JOYSTICK 0x30 with four axes and max_speed cap."""
     spd = self.max_speed if speed is None else speed
     frame = self._joystick_builder.build(axis_strafe, axis_forward, axis_spin, axis_pivot, spd)
     self.serial.write(frame)
@@ -37,6 +39,7 @@ class RoverUartClient:
       self.last_ack = ""
 
   def send_stop(self):
+    """Send a zero joystick frame (speed=0) to halt all wheels."""
     frame = self._joystick_builder.build_stop()
     self.serial.write(frame)
     if self.wait_ack:

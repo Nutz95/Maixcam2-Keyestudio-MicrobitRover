@@ -27,6 +27,13 @@ class ControllerState:
     self.pressed_edge.clear()
     return edges
 
+  def take_edge(self, name):
+    """Return True once per button press (does not clear other edges)."""
+    if self.pressed_edge.get(name):
+      self.pressed_edge.pop(name, None)
+      return True
+    return False
+
   def copy(self):
     clone = ControllerState()
     clone.left_x = self.left_x

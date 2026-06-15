@@ -31,6 +31,8 @@ class XboxInputService:
     self._reader = None
     self._force_pair = False
     self._handoff = False
+    self._pending_speed_lb = False
+    self._pending_speed_rb = False
 
   def _log_drive_mapping(self):
     axes = self._config_store.get().get("mapping", {}).get("axes", {})
@@ -42,6 +44,15 @@ class XboxInputService:
       f" pivot={axes.get('drive_pivot', 'left_x')}"
     )
 
+  def consume_speed_edges(self):
+    """LB/RB press edges for session max_speed (one shot per physical press)."""
+    with self._lock:
+      lb = self._pending_speed_lb
+      rb = self._pending_speed_rb
+      self._pending_speed_lb = False
+      self._pending_speed_rb = False
+    return lb, rb
+
   def snapshot(self):
     with self._lock:
       state_copy = self.state.copy() if hasattr(self.state, "copy") else self.state
@@ -49,17 +60,26 @@ class XboxInputService:
 
   def poll(self):
     """Drain evdev on main thread — call every control-loop iteration."""
+    self._config_store.reload_if_changed()
     with self._lock:
       if not self._handoff or self._reader is None:
         return
       reader = self._reader
     try:
-      reader.drain_available()
+      reader.poll_inputs()
       live = reader.state.copy()
+      self._mapper.update_config(self._config_store.get())
       drive = self._mapper.compute(live)
+      speed_lb = reader.state.take_edge("btn_lb")
+      speed_rb = reader.state.take_edge("btn_rb")
+      reader.state.pressed_edge.clear()
       with self._lock:
         self.state = live
         self.drive = drive
+        if speed_lb:
+          self._pending_speed_lb = True
+        if speed_rb:
+          self._pending_speed_rb = True
     except OSError as exc:
       if exc.errno == 19:
         self._on_reader_lost("Controller disconnected")
@@ -233,7 +253,7 @@ class XboxInputService:
       self._handoff = True
       self.connected = True
       self.status = "Connected — drive"
-    reader.drain_available()
+    reader.poll_inputs()
     live = reader.state.copy()
     drive = self._mapper.compute(live)
     with self._lock:

@@ -3,6 +3,9 @@ MaixVision entry point — Xbox controller -> Mecanum rover.
 
 MaixVision runs this file from /tmp/maixpy_run/main.py.
 Shared code lives under /root/roverMecanum/ (deploy with tools/deploy_rover_mecanum.ps1).
+
+Config: edit /root/roverMecanum/config.json on the device, or deploy repo config with
+  .\\tools\\deploy_rover_mecanum.ps1 -SyncConfig
 """
 
 import sys
