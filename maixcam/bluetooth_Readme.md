@@ -29,7 +29,7 @@ cd tools
 
 Installe dans `/root/roverMecanum/` (config, lib, script principal).
 
-Voir `maixcam/roverMecanum/README.md` pour le mapping manette.
+Voir `maixcam/roverMecanum/README_FR.md` pour le mapping manette.
 
 ## Manette Xbox (legacy scripts)
 
