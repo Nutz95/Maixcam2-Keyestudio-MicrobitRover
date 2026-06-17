@@ -11,7 +11,7 @@
     "display_fps": 15
   },
   "rover": {
-    "max_speed": 125,
+    "max_speed": 255,
     "send_interval_ms": 30,
     "deadzone_percent": 5,
     "axis_sensitivity_percent": 70,
