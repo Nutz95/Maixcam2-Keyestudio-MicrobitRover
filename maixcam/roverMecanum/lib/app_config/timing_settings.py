@@ -1,6 +1,6 @@
 """Loop / Bluetooth / evdev timing from config.json."""
 
-from lib.app_config.parse_helpers import as_int, section
+from lib.config_parse_helpers import as_int, section
 
 
 class TimingSettings:

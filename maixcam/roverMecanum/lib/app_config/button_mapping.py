@@ -1,6 +1,6 @@
 """Face/shoulder button → preset action mapping."""
 
-from lib.app_config.parse_helpers import section
+from lib.config_parse_helpers import section
 
 
 class ButtonMapping:

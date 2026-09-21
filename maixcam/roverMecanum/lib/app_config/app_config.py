@@ -2,8 +2,9 @@
 
 from lib.app_config.camera_settings import CameraSettings
 from lib.app_config.evdev_settings import EvdevSettings
+from lib.ball_follow_settings import BallFollowSettings
 from lib.app_config.mapping_settings import MappingSettings
-from lib.app_config.parse_helpers import as_float, as_int, as_str, as_str_list
+from lib.config_parse_helpers import as_float, as_int, as_str, as_str_list
 from lib.app_config.rover_settings import RoverSettings
 from lib.app_config.timing_settings import TimingSettings
 
@@ -22,6 +23,7 @@ class AppConfig:
     "timing",
     "mapping",
     "evdev",
+    "ball_follow",
   )
 
   def __init__(self, raw: dict):
@@ -35,6 +37,7 @@ class AppConfig:
     self.timing = TimingSettings(raw)
     self.mapping = MappingSettings(raw)
     self.evdev = EvdevSettings(raw)
+    self.ball_follow = BallFollowSettings(raw)
 
   @classmethod
   def from_dict(cls, raw: dict) -> "AppConfig":

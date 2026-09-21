@@ -1,5 +1,7 @@
 from maix import image
 
+from lib.ball_follow_snapshot import BallFollowSnapshot
+
 
 class UiDrawer:
   """Full-screen HUD overlay (480x640 portrait) for camera + controller state."""
@@ -38,7 +40,18 @@ class UiDrawer:
   def disconnect_rect(self):
     return list(self._disconnect_rect)
 
-  def draw_overlay(self, img, connected, busy, state, drive, max_speed=255, status="", progress=0.0):
+  def draw_overlay(
+    self,
+    img,
+    connected,
+    busy,
+    state,
+    drive,
+    max_speed=255,
+    status="",
+    progress=0.0,
+    ball_snapshot=None,
+  ):
     """Draw HUD: speed bar, sticks, triggers, d-pad, pairing progress, buttons."""
     bx, by, bw, bh = self._back_pad
     img.draw_rect(bx, by, bw, bh, image.Color.from_rgb(0, 0, 0), thickness=-1)
@@ -53,27 +66,29 @@ class UiDrawer:
       rb = state.buttons.get("btn_rb", False)
       self._draw_speed_bar(img, max_speed, lb, rb)
 
-      gauge_cy = self.height // 2 - 20
-      radius = min(68, (self.width - 120) // 4)
-      bar_h = radius * 2 + 6
-      bar_y = gauge_cy - bar_h // 2
-      left_cx = self.width // 4 + 4
-      right_cx = self.width - self.width // 4 - 4
+      show_joystick = ball_snapshot is None or not ball_snapshot.enabled
+      if show_joystick:
+        gauge_cy = self.height // 2 - 20
+        radius = min(68, (self.width - 120) // 4)
+        bar_h = radius * 2 + 6
+        bar_y = gauge_cy - bar_h // 2
+        left_cx = self.width // 4 + 4
+        right_cx = self.width - self.width // 4 - 4
 
-      self._draw_gauge(
-        img, left_cx, gauge_cy, state.left_x, state.left_y, radius=radius, label="L",
-      )
-      self._draw_gauge(
-        img, right_cx, gauge_cy, state.right_x, state.right_y, radius=radius, label="R",
-      )
-      self._draw_trigger_bar(
-        img, 6, bar_y, 26, bar_h, state.lt, "LT", image.Color.from_rgb(60, 120, 220),
-      )
-      self._draw_trigger_bar(
-        img, self.width - 32, bar_y, 26, bar_h, state.rt, "RT",
-        image.Color.from_rgb(220, 100, 60),
-      )
-      self._draw_dpad(img, self.width // 2, gauge_cy + radius + 28, state.dpad_x, state.dpad_y)
+        self._draw_gauge(
+          img, left_cx, gauge_cy, state.left_x, state.left_y, radius=radius, label="L",
+        )
+        self._draw_gauge(
+          img, right_cx, gauge_cy, state.right_x, state.right_y, radius=radius, label="R",
+        )
+        self._draw_trigger_bar(
+          img, 6, bar_y, 26, bar_h, state.lt, "LT", image.Color.from_rgb(60, 120, 220),
+        )
+        self._draw_trigger_bar(
+          img, self.width - 32, bar_y, 26, bar_h, state.rt, "RT",
+          image.Color.from_rgb(220, 100, 60),
+        )
+        self._draw_dpad(img, self.width // 2, gauge_cy + radius + 28, state.dpad_x, state.dpad_y)
     elif busy:
       self._draw_bottom_bar(img)
       self._draw_progress(img, status, progress)
@@ -83,6 +98,102 @@ class UiDrawer:
       self._draw_bottom_bar(img)
       self._draw_button(img, self.pair_rect(), "PAIR", image.Color.from_rgb(40, 80, 160))
       self._draw_button(img, self.connect_rect(), "CONNECT", image.Color.from_rgb(40, 120, 60))
+    if ball_snapshot is not None:
+      self._draw_ball_status(img, ball_snapshot)
+      self._draw_ball_observation(img, ball_snapshot)
+
+  def _draw_ball_status(self, img, ball_snapshot: BallFollowSnapshot):
+    """Draw a large, high-contrast permanent control-mode indicator."""
+    label = ball_snapshot.mode_label
+    if not ball_snapshot.enabled:
+      background = image.Color.from_rgb(70, 70, 70)
+    elif ball_snapshot.color == "red":
+      background = image.Color.from_rgb(160, 40, 40)
+    else:
+      background = image.Color.from_rgb(20, 120, 60)
+    size = image.string_size(label, scale=1.4, thickness=2)
+    x = 60
+    y = 8
+    img.draw_rect(x, y, size.width() + 16, size.height() + 12, background, thickness=-1)
+    img.draw_rect(x, y, size.width() + 16, size.height() + 12, image.COLOR_WHITE, thickness=2)
+    img.draw_string(x + 8, y + 6, label, image.COLOR_WHITE, scale=1.4, thickness=2)
+
+  def _draw_ball_observation(self, img, ball_snapshot: BallFollowSnapshot):
+    """Draw the selected blob, its recent trajectory, and policy reason."""
+    if not ball_snapshot.enabled:
+      return
+    self._draw_ball_trajectory(img, ball_snapshot)
+    observation = ball_snapshot.observation
+    box_color = (
+      image.Color.from_rgb(240, 80, 80)
+      if ball_snapshot.color == "red"
+      else image.Color.from_rgb(80, 220, 80)
+    )
+    if observation is None:
+      img.draw_string(
+        8,
+        80,
+        f"BALL {ball_snapshot.command.reason}",
+        box_color,
+        scale=1.1,
+      )
+      return
+    scale_x = img.width() / max(1, observation.image_width)
+    scale_y = img.height() / max(1, observation.image_height)
+    left = int((observation.center_x - observation.width // 2) * scale_x)
+    top = int((observation.center_y - observation.height // 2) * scale_y)
+    width = max(1, int(observation.width * scale_x))
+    height = max(1, int(observation.height * scale_y))
+    img.draw_rect(
+      left,
+      top,
+      width,
+      height,
+      box_color,
+      thickness=3,
+    )
+    img.draw_circle(
+      int(observation.center_x * scale_x),
+      int(observation.center_y * scale_y),
+      4,
+      image.Color.from_rgb(255, 255, 255),
+      thickness=-1,
+    )
+    img.draw_string(
+      8,
+      80,
+      f"BALL {ball_snapshot.command.reason}",
+      box_color,
+      scale=1.1,
+    )
+
+  def _draw_ball_trajectory(self, img, ball_snapshot: BallFollowSnapshot):
+    """Draw the recent center path behind the current bounding box."""
+    previous_x = None
+    previous_y = None
+    for point in ball_snapshot.trajectory:
+      scale_x = img.width() / max(1, point.image_width)
+      scale_y = img.height() / max(1, point.image_height)
+      point_x = int(point.center_x * scale_x)
+      point_y = int(point.center_y * scale_y)
+      if previous_x is not None and previous_y is not None:
+        img.draw_line(
+          previous_x,
+          previous_y,
+          point_x,
+          point_y,
+          image.Color.from_rgb(255, 180, 40),
+          thickness=2,
+        )
+      img.draw_circle(
+        point_x,
+        point_y,
+        3,
+        image.Color.from_rgb(255, 180, 40),
+        thickness=-1,
+      )
+      previous_x = point_x
+      previous_y = point_y
 
   def _draw_progress(self, img, status, progress):
     """Show pairing/connect status text and a simple progress bar."""

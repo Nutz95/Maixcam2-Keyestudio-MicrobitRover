@@ -1,6 +1,6 @@
 """D-pad action mapping from config.json mapping.dpad."""
 
-from lib.app_config.parse_helpers import section
+from lib.config_parse_helpers import section
 
 
 class DpadMapping:

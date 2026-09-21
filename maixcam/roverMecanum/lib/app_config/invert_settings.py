@@ -1,6 +1,6 @@
 """Per-axis invert flags from config.json mapping.invert."""
 
-from lib.app_config.parse_helpers import as_bool, section
+from lib.config_parse_helpers import as_bool, section
 
 
 class InvertSettings:

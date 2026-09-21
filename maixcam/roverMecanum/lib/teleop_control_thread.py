@@ -43,9 +43,9 @@ class TeleopControlThread:
     send_ms = 0
     was_connected = False
     while not self._stop.is_set() and not app.need_exit():
+      self._xbox.poll()
       if self._on_tick is not None:
         self._on_tick()
-      self._xbox.poll()
       view = self._xbox.connected_drive()
       now = time.ticks_ms()
       if view.connected and view.drive is not None and now - send_ms >= self._send_interval_ms:

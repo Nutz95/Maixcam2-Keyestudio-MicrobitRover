@@ -2,6 +2,7 @@ import threading
 
 from maix import app, display, image, time, touchscreen
 
+from lib.ball_follow_controller import BallFollowController
 from lib.bluetooth_installer import BluetoothInstaller
 from lib.camera_preview_service import CameraPreviewService
 from lib.config_store import ConfigStore
@@ -35,6 +36,7 @@ class XboxRoverApp:
     )
     print(BluetoothInstaller().install())
     self._xbox = XboxInputService(self._config_store)
+    self._ball_follow = BallFollowController(cfg.ball_follow)
     self._disp = display.Display()
     self._ui = UiDrawer(self._disp.width(), self._disp.height())
     self._ts = touchscreen.TouchScreen()
@@ -46,6 +48,8 @@ class XboxRoverApp:
     self._was_connected = False
     self._was_busy = False
     self._camera = None
+    self._manual_resume_pending = False
+    self._ball_follow_settings = cfg.ball_follow
     self._shutdown_done = False
     self._config_max_speed = cfg.rover.max_speed
     self._session_max_speed = self._config_max_speed
@@ -83,6 +87,10 @@ class XboxRoverApp:
     if now - self._last_config_tick_ms >= self._timing.config_reload_ms:
       self._apply_rover_config()
       self._last_config_tick_ms = now
+    if self._xbox.consume_mode_toggle():
+      self._toggle_ball_follow()
+    if self._xbox.consume_color_toggle():
+      self._cycle_ball_color()
     self._handle_speed_bumpers()
 
   def _apply_rover_config(self):
@@ -90,6 +98,9 @@ class XboxRoverApp:
     self._timing = cfg.timing
     self._display_interval_ms = cfg.camera.display_interval_ms
     self._xbox.apply_config(cfg)
+    if cfg.ball_follow is not self._ball_follow_settings:
+      self._ball_follow.apply_settings(cfg.ball_follow)
+      self._ball_follow_settings = cfg.ball_follow
     rover = cfg.rover
     if rover.max_speed != self._config_max_speed:
       self._config_max_speed = rover.max_speed
@@ -98,6 +109,21 @@ class XboxRoverApp:
     self._control.set_send_interval_ms(rover.send_interval_ms)
     self._control.set_poll_sleep_ms(cfg.timing.teleop_poll_sleep_ms)
     self._rover.set_max_speed(self._session_max_speed)
+
+  def _toggle_ball_follow(self):
+    """Toggle automatic mode from one Xbox View/Select press."""
+    enabled = not self._ball_follow.enabled
+    self._ball_follow.set_enabled(enabled)
+    self._rover.send_stop()
+    self._manual_resume_pending = not enabled
+    print(f"ball: {'enabled' if enabled else 'disabled'}")
+
+  def _cycle_ball_color(self):
+    """Cycle green/red LAB presets from one Xbox Menu/Start press."""
+    color = self._ball_follow.cycle_color()
+    if self._ball_follow.enabled:
+      self._rover.send_stop()
+    print(f"ball: color={color}")
 
   def _handle_speed_bumpers(self):
     if not self._xbox.connected_drive().connected:
@@ -125,6 +151,7 @@ class XboxRoverApp:
       return
     self._shutdown_done = True
     self._exit.set()
+    self._ball_follow.set_enabled(False)
     self._control.stop()
     self._xbox.close()
     try:
@@ -152,6 +179,7 @@ class XboxRoverApp:
 
   def _draw_frame(self):
     snap = self._xbox.snapshot()
+    ball_snap = self._ball_follow.snapshot()
     if self._camera is not None:
       self._camera.set_paused(bool(snap.busy and not snap.connected))
 
@@ -166,6 +194,7 @@ class XboxRoverApp:
     self._ui.draw_overlay(
       frame, snap.connected, snap.busy, snap.state, snap.drive, self._session_max_speed,
       status=snap.status, progress=snap.progress,
+      ball_snapshot=ball_snap,
     )
     self._disp.show(frame)
 
@@ -236,6 +265,17 @@ class XboxRoverApp:
 
   def _send_drive(self, drive):
     """UART joystick/preset to micro:bit (protocol unchanged)."""
+    if self._ball_follow.enabled:
+      frame = None
+      if self._camera is not None and self._camera.ready:
+        frame = self._camera.get_frame()
+      command = self._ball_follow.update(frame)
+      self._rover.send_joystick(0, command.forward, command.spin, 0)
+      return
+    if self._manual_resume_pending:
+      self._rover.send_stop()
+      self._manual_resume_pending = False
+      return
     if drive.preset_cmd is not None:
       self._rover.send_preset(drive.preset_cmd)
       return

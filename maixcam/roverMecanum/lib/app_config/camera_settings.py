@@ -1,6 +1,6 @@
 """Camera + HUD display cadence from config.json."""
 
-from lib.app_config.parse_helpers import as_bool, as_int, as_str, section
+from lib.config_parse_helpers import as_bool, as_int, as_str, section
 
 
 class CameraSettings:
@@ -18,7 +18,7 @@ class CameraSettings:
     self.enabled = as_bool(cam, "enabled", True)
     self.width = as_int(cam, "width", 640)
     self.height = as_int(cam, "height", 480)
-    self.fps = max(1, min(30, as_int(cam, "fps", 30)))
+    self.fps = max(1, min(60, as_int(cam, "fps", 60)))
     self.format = as_str(cam, "format", "rgb888")
     self.display_fps = max(5, min(30, as_int(cam, "display_fps", 20)))
     self.ready_timeout_ms = as_int(timing, "camera_ready_timeout_ms", 8000)

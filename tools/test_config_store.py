@@ -1,5 +1,6 @@
 """Unit tests for ConfigStore atomic load/save."""
 
+import json
 import os
 import sys
 import tempfile
@@ -34,6 +35,32 @@ class TestConfigStoreAtomic(unittest.TestCase):
       store2.load()
       self.assertEqual(store2.settings().controller_mac, "AA:BB:CC:DD:EE:FF")
       self.assertEqual(store2.settings().mapping.dpad.up, "forward")
+
+  def test_legacy_ball_thresholds_fill_missing_color_presets(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      path = os.path.join(tmp, "config.json")
+      store = ConfigStore(path=path)
+      store.load()
+      with open(path, "r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+      raw["ball_follow"] = {
+        "thresholds": [[0, 80, -120, -10, 0, 30]],
+        "area_threshold": 120,
+      }
+      with open(path, "w", encoding="utf-8") as handle:
+        json.dump(raw, handle)
+
+      settings = store.load()
+
+      # Missing keys are filled from the packaged template, not rewritten values.
+      self.assertEqual(
+        settings.ball_follow.thresholds_for("green"),
+        [[40, 90, -90, -40, 25, 75]],
+      )
+      self.assertEqual(
+        settings.ball_follow.thresholds_for("red"),
+        [[0, 80, 40, 80, 10, 80]],
+      )
 
 
 if __name__ == "__main__":

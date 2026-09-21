@@ -3,7 +3,7 @@
 from lib.app_config.button_mapping import ButtonMapping
 from lib.app_config.dpad_mapping import DpadMapping
 from lib.app_config.invert_settings import InvertSettings
-from lib.app_config.parse_helpers import as_str, section
+from lib.config_parse_helpers import as_str, section
 
 
 class MappingSettings:

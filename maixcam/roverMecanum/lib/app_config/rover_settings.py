@@ -1,6 +1,6 @@
 """UART teleop tuning from config.json."""
 
-from lib.app_config.parse_helpers import as_float, as_int, as_str, section
+from lib.config_parse_helpers import as_float, as_int, as_str, section
 
 
 class RoverSettings:

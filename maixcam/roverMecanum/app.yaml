@@ -13,7 +13,6 @@ files:
   - lib\app_config\evdev_settings.py
   - lib\app_config\invert_settings.py
   - lib\app_config\mapping_settings.py
-  - lib\app_config\parse_helpers.py
   - lib\app_config\rover_settings.py
   - lib\app_config\timing_settings.py
   - lib\__init__.py
@@ -21,6 +20,13 @@ files:
   - lib\abs_info.py
   - lib\abs_range.py
   - lib\axis_curve.py
+  - lib\ball_detector.py
+  - lib\ball_follow_command.py
+  - lib\ball_follow_controller.py
+  - lib\ball_follow_policy.py
+  - lib\ball_follow_settings.py
+  - lib\ball_follow_snapshot.py
+  - lib\ball_observation.py
   - lib\bluetooth_command_result.py
   - lib\bluetooth_device_line.py
   - lib\bluetooth_installer.py
@@ -28,6 +34,7 @@ files:
   - lib\bluetoothctl_runner.py
   - lib\bluetoothctl_session.py
   - lib\camera_preview_service.py
+  - lib\config_parse_helpers.py
   - lib\config_store.py
   - lib\connected_drive.py
   - lib\controller_mapping_engine.py

@@ -1,6 +1,6 @@
 """Evdev axis layout selection from config.json."""
 
-from lib.app_config.parse_helpers import as_str, section
+from lib.config_parse_helpers import as_str, section
 
 
 class EvdevSettings:

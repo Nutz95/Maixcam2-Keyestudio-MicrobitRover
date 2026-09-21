@@ -13,7 +13,7 @@ class ConfigStore:
   Load and persist config.json (hot-reload safe).
 
   Runtime only sees ``AppConfig``. A dict is used solely to read/write the file
-  (template merge, MAC patch) — never as an application model.
+  (template sync, MAC patch) — never as an application model.
   """
 
   def __init__(self, path=None):
@@ -38,8 +38,8 @@ class ConfigStore:
         raw = self._load_template()
         created = True
 
-    merged = self._merge_template(raw)
-    if created or merged:
+    synced = self._sync_with_template(raw)
+    if created or synced:
       self._write_dict(raw)
     elif os.path.isfile(self.path):
       self._mtime = os.path.getmtime(self.path)
@@ -132,10 +132,25 @@ class ConfigStore:
     with open(self._template_path(), "r", encoding="utf-8") as handle:
       return json.load(handle)
 
-  def _merge_template(self, data: dict) -> bool:
-    """Fill missing template keys; apply mapping_revision migration. Returns changed."""
+  def _sync_with_template(self, data: dict) -> bool:
+    """
+    Add missing template keys only. Never rewrite existing user values.
+
+    Prints every key that was filled so a partial on-device config is obvious.
+    mapping_revision upgrades remain the only intentional overwrite path.
+    """
     base = self._load_template()
-    changed = self._fill_missing(data, base)
+    missing = self._missing_paths(data, base)
+    changed = False
+    if missing:
+      print(
+        "config: incomplete vs packaged template; filling missing keys:"
+        f" {', '.join(missing)}"
+      )
+      print(
+        "config: redeploy maixcam/roverMecanum/config.json if values look stale"
+      )
+      changed = self._fill_missing(data, base)
 
     target_revision = base.get("mapping_revision", 0)
     if data.get("mapping_revision", 0) < target_revision:
@@ -154,6 +169,20 @@ class ConfigStore:
       )
 
     return changed
+
+  @staticmethod
+  def _missing_paths(destination: dict, template: dict, prefix: str = "") -> list:
+    """Return dotted paths present in template but absent from destination."""
+    missing = []
+    for key, value in template.items():
+      path = f"{prefix}.{key}" if prefix else str(key)
+      if key not in destination:
+        missing.append(path)
+      elif isinstance(value, dict) and isinstance(destination[key], dict):
+        missing.extend(
+          ConfigStore._missing_paths(destination[key], value, path),
+        )
+    return missing
 
   @staticmethod
   def _fill_missing(destination: dict, template: dict) -> bool:
