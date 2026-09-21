@@ -7,7 +7,12 @@ desc: Mecanum rover controler (Keyestudio microbit rover!). Supports Xbox contro
 files:
   - lib\app_config\__init__.py
   - lib\app_config\app_config.py
+  - lib\app_config\button_mapping.py
   - lib\app_config\camera_settings.py
+  - lib\app_config\dpad_mapping.py
+  - lib\app_config\evdev_settings.py
+  - lib\app_config\invert_settings.py
+  - lib\app_config\mapping_settings.py
   - lib\app_config\parse_helpers.py
   - lib\app_config\rover_settings.py
   - lib\app_config\timing_settings.py

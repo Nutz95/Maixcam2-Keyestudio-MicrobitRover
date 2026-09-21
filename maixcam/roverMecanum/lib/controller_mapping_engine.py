@@ -1,3 +1,4 @@
+from lib.app_config import AppConfig
 from lib.axis_curve import apply_curve
 from lib.drive_output import DriveOutput
 from lib.protocol_constants import PRESET_ACTIONS
@@ -6,31 +7,58 @@ from lib.uart_protocol import dpad_axes_for_action
 
 class ControllerMappingEngine:
   """
-  Apply config.json mapping: sticks, triggers, d-pad -> rover drive axes.
+  Apply config mapping: sticks, triggers, d-pad -> rover drive axes.
 
   Shaping pipeline per axis: invert -> deadzone -> response curve -> sensitivity.
+  Mapping rules are cached in ``update_config()``; ``compute()`` only transforms state.
   """
 
-  def __init__(self, config):
-    self._config = config
+  def __init__(self, app_config: AppConfig):
+    self._deadzone = 0
+    self._sensitivity = 1.0
+    self._expo = 2.2
+    self._curve = "expo"
+    self._forward_src = "left_y"
+    self._strafe_src = "trigger_diff"
+    self._spin_src = "right_x"
+    self._pivot_src = "left_x"
+    self._invert_forward = False
+    self._invert_strafe = False
+    self._invert_spin = False
+    self._invert_pivot = False
+    self._dpad = None
+    self._buttons = None
+    self.update_config(app_config)
 
-  def update_config(self, config):
-    """Refresh mapping rules (call after config reload)."""
-    self._config = config
+  def update_config(self, app_config: AppConfig):
+    """Cache deadzone, curve, and axis sources from typed settings."""
+    rover = app_config.rover
+    mapping = app_config.mapping
+    sensitivity = max(1, min(100, rover.axis_sensitivity_percent))
+    self._deadzone = 32768 * rover.deadzone_percent // 100
+    self._sensitivity = sensitivity / 100.0
+    self._expo = max(0.3, min(3.0, rover.axis_expo))
+    self._curve = rover.axis_curve
+    self._forward_src = mapping.drive_forward
+    self._strafe_src = mapping.drive_strafe
+    self._spin_src = mapping.drive_spin
+    self._pivot_src = mapping.drive_pivot
+    self._invert_forward = mapping.invert.for_source(mapping.drive_forward)
+    self._invert_strafe = mapping.invert.for_source(mapping.drive_strafe)
+    self._invert_spin = mapping.invert.for_source(mapping.drive_spin)
+    self._invert_pivot = mapping.invert.for_source(mapping.drive_pivot)
+    self._dpad = mapping.dpad
+    self._buttons = mapping.buttons
 
   def compute(self, state):
     """Build DriveOutput from a ControllerState snapshot."""
     out = DriveOutput()
-    mapping = self._config.get("mapping", {})
-    axes_map = mapping.get("axes", {})
-    invert = mapping.get("invert", {})
-    rover = self._config.get("rover", {})
-    deadzone = int(32768 * rover.get("deadzone_percent", 2) / 100)
-    sensitivity = max(1, min(100, int(rover.get("axis_sensitivity_percent", 70)))) / 100.0
-    expo = max(0.3, min(3.0, float(rover.get("axis_expo", 2.2))))
-    curve = rover.get("axis_curve", "expo")
+    deadzone = self._deadzone
+    sensitivity = self._sensitivity
+    expo = self._expo
+    curve = self._curve
 
-    dpad = self._dpad_axes(state, mapping.get("dpad", {}))
+    dpad = self._dpad_axes(state)
     if dpad is not None:
       out.axis_strafe, out.axis_forward = dpad
       out.axis_strafe = self._shape_axis(out.axis_strafe, deadzone, sensitivity, expo, curve)
@@ -40,20 +68,19 @@ class ControllerMappingEngine:
         out.preset_cmd = preset
       return out
 
-    forward_src = axes_map.get("drive_forward", "left_y")
-    strafe_src = axes_map.get("drive_strafe", "trigger_diff")
-    spin_src = axes_map.get("drive_spin", axes_map.get("drive_rotate", "right_x"))
-    pivot_src = axes_map.get("drive_pivot", "left_x")
+    forward = self._source_value(state, self._forward_src)
+    strafe = self._source_value(state, self._strafe_src)
+    spin = self._source_value(state, self._spin_src)
+    pivot = self._source_value(state, self._pivot_src)
 
-    forward = self._source_value(state, forward_src)
-    strafe = self._source_value(state, strafe_src)
-    spin = self._source_value(state, spin_src)
-    pivot = self._source_value(state, pivot_src)
-
-    forward = self._apply_invert(forward, forward_src, invert)
-    strafe = self._apply_invert(strafe, strafe_src, invert)
-    spin = self._apply_invert(spin, spin_src, invert)
-    pivot = self._apply_invert(pivot, pivot_src, invert)
+    if self._invert_forward:
+      forward = -forward
+    if self._invert_strafe:
+      strafe = -strafe
+    if self._invert_spin:
+      spin = -spin
+    if self._invert_pivot:
+      pivot = -pivot
 
     out.axis_forward = self._shape_axis(forward, deadzone, sensitivity, expo, curve)
     out.axis_strafe = self._shape_axis(strafe, deadzone, sensitivity, expo, curve)
@@ -67,9 +94,6 @@ class ControllerMappingEngine:
     return out
 
   def _source_value(self, state, source):
-    if not isinstance(source, str):
-      return 0
-    source = source.strip().lower()
     if source == "left_x":
       return state.left_x
     if source == "left_y":
@@ -86,19 +110,13 @@ class ControllerMappingEngine:
       return state.trigger_diff()
     return 0
 
-  def _apply_invert(self, value, source, invert):
-    if not isinstance(source, str):
-      return value
-    key = source.strip().lower()
-    return -value if invert.get(key, False) else value
-
   def _apply_deadzone(self, value, deadzone):
     if abs(value) <= deadzone:
       return 0
     sign = 1 if value > 0 else -1
     mag = abs(value) - deadzone
     span = max(1, 32767 - deadzone)
-    return sign * min(32767, int(mag * 32767 / span))
+    return sign * min(32767, mag * 32767 // span)
 
   def _shape_axis(self, value, deadzone, sensitivity, expo, curve):
     """Deadzone, response curve (log/expo/linear), then sensitivity scale."""
@@ -111,43 +129,44 @@ class ControllerMappingEngine:
     norm = min(1.0, norm * sensitivity)
     return sign * int(norm * 32767)
 
-  def _dpad_axes(self, state, dpad_map):
-    if not dpad_map:
+  def _dpad_axes(self, state):
+    dpad = self._dpad
+    if dpad is None:
       return None
     dx = state.dpad_x
     dy = state.dpad_y
     if dx == 0 and dy == 0:
       return None
 
-    action = None
     if dy < 0 and dx < 0:
-      action = dpad_map.get("up_left")
+      action = dpad.up_left
     elif dy < 0 and dx > 0:
-      action = dpad_map.get("up_right")
+      action = dpad.up_right
     elif dy > 0 and dx < 0:
-      action = dpad_map.get("down_left")
+      action = dpad.down_left
     elif dy > 0 and dx > 0:
-      action = dpad_map.get("down_right")
+      action = dpad.down_right
     elif dy < 0:
-      action = dpad_map.get("up")
+      action = dpad.up
     elif dy > 0:
-      action = dpad_map.get("down")
+      action = dpad.down
     elif dx < 0:
-      action = dpad_map.get("left")
+      action = dpad.left
     elif dx > 0:
-      action = dpad_map.get("right")
+      action = dpad.right
+    else:
+      return None
 
     if not action:
       return None
-    return self._action_to_axes(action)
-
-  def _action_to_axes(self, action):
     return dpad_axes_for_action(action)
 
   def _button_preset(self, state):
-    buttons = self._config.get("mapping", {}).get("buttons", {})
+    buttons = self._buttons
+    if buttons is None:
+      return None
     preset = None
-    for btn_name, action in buttons.items():
+    for btn_name, action in buttons.bindings():
       if not action:
         continue
       if not state.pressed_edge.get(btn_name):

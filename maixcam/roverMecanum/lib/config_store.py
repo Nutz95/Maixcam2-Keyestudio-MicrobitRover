@@ -1,4 +1,4 @@
-"""Load and persist config.json with atomic writes + typed AppConfig cache."""
+"""Load and persist config.json with atomic writes; AppConfig is the in-memory model."""
 
 import json
 import os
@@ -12,48 +12,39 @@ class ConfigStore:
   """
   Load and persist config.json (hot-reload safe).
 
-  In-memory ``AppConfig`` is the source of truth for callers. Disk is only
-  touched on ``load`` / ``save`` / throttled ``reload_if_changed`` (mtime).
+  Runtime only sees ``AppConfig``. A dict is used solely to read/write the file
+  (template merge, MAC patch) — never as an application model.
   """
 
   def __init__(self, path=None):
     self._explicit_path = path
     self.path = path or resolve_config_path()
-    self._data = None
     self._settings = None
     self._mtime = 0
 
-  def load(self):
+  def load(self) -> AppConfig:
     """Read config from disk; restore template if missing or corrupt."""
     self.path = self._explicit_path or resolve_config_path()
+    created = False
     if not os.path.isfile(self.path):
       print(f"config: no file at {self.path}, creating from template")
-      self._data = self._load_template()
-      self.save()
-      self._mtime = os.path.getmtime(self.path)
-      self._settings = AppConfig.from_dict(self._data)
-      return self._data
+      raw = self._load_template()
+      created = True
+    else:
+      try:
+        raw = self._read_json()
+      except (OSError, json.JSONDecodeError, UnicodeError) as error:
+        print(f"config: corrupt at {self.path} ({error}); restoring template")
+        raw = self._load_template()
+        created = True
 
-    try:
-      with open(self.path, "r", encoding="utf-8") as handle:
-        raw = handle.read()
-      if not raw.strip():
-        raise json.JSONDecodeError("empty file", raw, 0)
-      self._data = json.loads(raw)
-      if not isinstance(self._data, dict):
-        raise json.JSONDecodeError("root must be object", raw, 0)
-    except (OSError, json.JSONDecodeError, UnicodeError) as error:
-      print(f"config: corrupt at {self.path} ({error}); restoring template")
-      self._data = self._load_template()
-      self.save()
+    raw, merged = self._merge_template(raw)
+    if created or merged:
+      self._write_dict(raw)
+    elif os.path.isfile(self.path):
       self._mtime = os.path.getmtime(self.path)
-      self._settings = AppConfig.from_dict(self._data)
-      return self._data
-
-    self._merge_template()
-    self._mtime = os.path.getmtime(self.path)
-    self._settings = AppConfig.from_dict(self._data)
-    return self._data
+    self._settings = AppConfig.from_dict(raw)
+    return self._settings
 
   def settings(self) -> AppConfig:
     """Cached typed settings — no disk I/O."""
@@ -78,16 +69,50 @@ class ConfigStore:
       self.load()
     return self._settings
 
-  def save(self):
-    """Atomically write config to avoid empty-file races with hot-reload."""
-    if self._data is None:
-      return
+  def set_controller_mac(self, mac):
+    """Patch controller_mac in config.json and refresh the typed snapshot."""
+    self.settings()
+    raw = self._read_json()
+    raw["controller_mac"] = str(mac).upper()
+    self._write_dict(raw)
+    self._settings = AppConfig.from_dict(raw)
+
+  def clear_controller_mac(self):
+    """Clear the saved controller MAC from config.json."""
+    self.set_controller_mac("")
+
+  def log_rover_settings(self):
+    """Print a one-line summary of rover tuning for the console."""
+    app_config = self.settings()
+    rover = app_config.rover
+    print(
+      "config:"
+      f" path={self.path}"
+      f" max_speed={rover.max_speed}"
+      f" deadzone={rover.deadzone_percent}%"
+      f" curve={rover.axis_curve}"
+      f" sensitivity={rover.axis_sensitivity_percent}%"
+      f" send_ms={rover.send_interval_ms}"
+    )
+
+  def _read_json(self) -> dict:
+    with open(self.path, "r", encoding="utf-8") as handle:
+      text = handle.read()
+    if not text.strip():
+      raise json.JSONDecodeError("empty file", text, 0)
+    raw = json.loads(text)
+    if not isinstance(raw, dict):
+      raise json.JSONDecodeError("root must be object", text, 0)
+    return raw
+
+  def _write_dict(self, data: dict):
+    """Atomic JSON write; updates mtime after replace."""
     os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
     directory = os.path.dirname(self.path) or "."
     fd, tmp_path = tempfile.mkstemp(prefix="config.", suffix=".tmp", dir=directory)
     try:
       with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump(self._data, handle, indent=2)
+        json.dump(data, handle, indent=2)
         handle.write("\n")
       os.replace(tmp_path, self.path)
     except Exception as save_error:
@@ -99,43 +124,6 @@ class ConfigStore:
       raise
     if os.path.isfile(self.path):
       self._mtime = os.path.getmtime(self.path)
-    self._settings = AppConfig.from_dict(self._data)
-
-  def get(self):
-    """Return the in-memory JSON dict (mapping engines / MAC writes)."""
-    if self._data is None:
-      self.load()
-    return self._data
-
-  def rover_settings(self):
-    """Typed rover block (prefer ``settings().rover``)."""
-    return self.settings().rover
-
-  def set_controller_mac(self, mac):
-    """Persist the paired controller MAC address."""
-    data = self.get()
-    data["controller_mac"] = mac.upper()
-    self.save()
-
-  def clear_controller_mac(self):
-    """Clear the saved controller MAC from config.json."""
-    data = self.get()
-    data["controller_mac"] = ""
-    self.save()
-
-  def log_rover_settings(self):
-    """Print a one-line summary of rover tuning for the console."""
-    cfg = self.settings()
-    rover = cfg.rover
-    print(
-      "config:"
-      f" path={self.path}"
-      f" max_speed={rover.max_speed}"
-      f" deadzone={rover.deadzone_percent}%"
-      f" curve={rover.axis_curve}"
-      f" sensitivity={rover.axis_sensitivity_percent}%"
-      f" send_ms={rover.send_interval_ms}"
-    )
 
   def _template_path(self):
     return os.path.join(os.path.dirname(__file__), "..", "config.json")
@@ -144,68 +132,68 @@ class ConfigStore:
     with open(self._template_path(), "r", encoding="utf-8") as handle:
       return json.load(handle)
 
-  def _merge_template(self):
+  def _merge_template(self, data: dict):
+    """Fill missing template keys on a fresh JSON dict. Returns (data, changed)."""
     base = self._load_template()
     changed = False
     for key, value in base.items():
-      if key not in self._data:
-        self._data[key] = value
+      if key not in data:
+        data[key] = value
         changed = True
 
     target_revision = base.get("mapping_revision", 0)
-    if self._data.get("mapping_revision", 0) < target_revision:
-      if "mapping" not in self._data:
-        self._data["mapping"] = dict(base["mapping"])
-      if "evdev" not in self._data:
-        self._data["evdev"] = dict(base["evdev"])
-      self._data["mapping_revision"] = target_revision
-      self._data["mapping"]["axes"] = dict(base["mapping"]["axes"])
+    if data.get("mapping_revision", 0) < target_revision:
+      if "mapping" not in data:
+        data["mapping"] = dict(base["mapping"])
+      if "evdev" not in data:
+        data["evdev"] = dict(base["evdev"])
+      data["mapping_revision"] = target_revision
+      data["mapping"]["axes"] = dict(base["mapping"]["axes"])
       if "dpad" in base["mapping"]:
-        self._data["mapping"]["dpad"] = dict(base["mapping"]["dpad"])
-      self._data["evdev"] = dict(base["evdev"])
+        data["mapping"]["dpad"] = dict(base["mapping"]["dpad"])
+      data["evdev"] = dict(base["evdev"])
       if "camera" in base:
-        self._data["camera"] = dict(base["camera"])
+        data["camera"] = dict(base["camera"])
       changed = True
       print(
         "config: mapping upgraded to revision"
         f" {target_revision} (forward=left_y strafe=triggers spin=right_x pivot=left_x)"
       )
 
-    for section in ("rover", "mapping", "evdev", "camera", "timing"):
-      if section not in base:
+    for section_name in ("rover", "mapping", "evdev", "camera", "timing"):
+      if section_name not in base:
         continue
-      if section not in self._data:
-        self._data[section] = dict(base[section])
+      if section_name not in data:
+        data[section_name] = dict(base[section_name])
         changed = True
         continue
-      for key, value in base[section].items():
-        if key not in self._data[section]:
-          self._data[section][key] = value
+      for key, value in base[section_name].items():
+        if key not in data[section_name]:
+          data[section_name][key] = value
           changed = True
-    if "axes" in self._data.get("mapping", {}):
+    if "axes" in data.get("mapping", {}):
       for key, value in base["mapping"]["axes"].items():
-        if key not in self._data["mapping"]["axes"]:
-          self._data["mapping"]["axes"][key] = value
+        if key not in data["mapping"]["axes"]:
+          data["mapping"]["axes"][key] = value
           changed = True
-    if "invert" in self._data.get("mapping", {}):
+    if "invert" in data.get("mapping", {}):
       for key, value in base["mapping"]["invert"].items():
-        if key not in self._data["mapping"]["invert"]:
-          self._data["mapping"]["invert"][key] = value
+        if key not in data["mapping"]["invert"]:
+          data["mapping"]["invert"][key] = value
           changed = True
-    if "buttons" in self._data.get("mapping", {}):
+    if "buttons" in data.get("mapping", {}):
       for key, value in base["mapping"]["buttons"].items():
-        if key not in self._data["mapping"]["buttons"]:
-          self._data["mapping"]["buttons"][key] = value
+        if key not in data["mapping"]["buttons"]:
+          data["mapping"]["buttons"][key] = value
           changed = True
     if "dpad" in base.get("mapping", {}):
-      if "dpad" not in self._data.get("mapping", {}):
-        self._data["mapping"]["dpad"] = dict(base["mapping"]["dpad"])
+      if "dpad" not in data.get("mapping", {}):
+        data["mapping"]["dpad"] = dict(base["mapping"]["dpad"])
         changed = True
       else:
         for key, value in base["mapping"]["dpad"].items():
-          if key not in self._data["mapping"]["dpad"]:
-            self._data["mapping"]["dpad"][key] = value
+          if key not in data["mapping"]["dpad"]:
+            data["mapping"]["dpad"][key] = value
             changed = True
 
-    if changed:
-      self.save()
+    return data, changed

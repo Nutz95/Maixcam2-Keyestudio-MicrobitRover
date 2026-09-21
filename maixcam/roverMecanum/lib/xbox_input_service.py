@@ -20,7 +20,7 @@ class XboxInputService:
     self._app_config = config_store.settings()
     self._pairing = BluetoothPairingService(config_store)
     self._finder = EvdevDeviceFinder()
-    self._mapper = ControllerMappingEngine(self._app_config.raw)
+    self._mapper = ControllerMappingEngine(self._app_config)
     self._log_drive_mapping()
     self._lock = threading.Lock()
     self.state = ControllerState()
@@ -39,19 +39,19 @@ class XboxInputService:
     self._hid_logged = False
     self._pairing.ensure_agent()
 
-  def apply_config(self, cfg: AppConfig):
+  def apply_config(self, app_config: AppConfig):
     """Refresh cached settings + mapping (called after throttled config reload)."""
-    self._app_config = cfg
-    self._mapper.update_config(cfg.raw)
+    self._app_config = app_config
+    self._mapper.update_config(app_config)
 
   def _log_drive_mapping(self):
-    axes = self._app_config.mapping.get("axes", {})
+    mapping = self._app_config.mapping
     print(
       "drive mapping:"
-      f" forward={axes.get('drive_forward', 'left_y')}"
-      f" strafe={axes.get('drive_strafe', 'trigger_diff')}"
-      f" spin={axes.get('drive_spin', axes.get('drive_rotate', 'right_x'))}"
-      f" pivot={axes.get('drive_pivot', 'left_x')}"
+      f" forward={mapping.drive_forward}"
+      f" strafe={mapping.drive_strafe}"
+      f" spin={mapping.drive_spin}"
+      f" pivot={mapping.drive_pivot}"
     )
 
   def consume_speed_edges(self):
@@ -311,7 +311,11 @@ class XboxInputService:
         ev_path = self._finder.find_xbox_event() or ev_path
         continue
       try:
-        reader = EvdevReader(ev_path, self._app_config.raw)
+        reader = EvdevReader(
+          ev_path,
+          evdev_settings=self._app_config.evdev,
+          drain_max_events=self._app_config.timing.evdev_drain_max_events,
+        )
         reader.open()
         break
       except OSError as io_error:

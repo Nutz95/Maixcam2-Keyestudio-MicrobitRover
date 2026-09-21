@@ -1,42 +1,42 @@
-"""Root typed config built once from config.json."""
-
-from __future__ import annotations
+"""Typed root config loaded once from config.json."""
 
 from lib.app_config.camera_settings import CameraSettings
-from lib.app_config.parse_helpers import as_float, as_str, section
+from lib.app_config.evdev_settings import EvdevSettings
+from lib.app_config.mapping_settings import MappingSettings
+from lib.app_config.parse_helpers import as_float, as_int, as_str, as_str_list
 from lib.app_config.rover_settings import RoverSettings
 from lib.app_config.timing_settings import TimingSettings
 
 
 class AppConfig:
-  """
-  Full app settings from the JSON dict.
-
-  Call sites use attributes (``cfg.camera.display_fps``), not string keys.
-  Mapping / evdev blocks stay as dicts for engines not yet fully typed.
-  """
+  """Immutable snapshot of config.json used by the rest of the app."""
 
   __slots__ = (
-    "camera", "rover", "timing",
-    "controller_name", "controller_name_aliases", "controller_mac",
-    "bluetooth_scan_timeout_sec", "mapping", "evdev", "raw",
+    "mapping_revision",
+    "controller_name",
+    "controller_name_aliases",
+    "controller_mac",
+    "bluetooth_scan_timeout_sec",
+    "camera",
+    "rover",
+    "timing",
+    "mapping",
+    "evdev",
   )
 
   def __init__(self, raw: dict):
-    if not isinstance(raw, dict):
-      raw = {}
-    self.raw = raw
+    self.mapping_revision = as_int(raw, "mapping_revision", 0)
+    self.controller_name = as_str(raw, "controller_name", "Xbox Wireless Controller")
+    self.controller_name_aliases = as_str_list(raw, "controller_name_aliases")
+    self.controller_mac = as_str(raw, "controller_mac", "").upper()
+    self.bluetooth_scan_timeout_sec = as_float(raw, "bluetooth_scan_timeout_sec", 20.0)
     self.camera = CameraSettings(raw)
     self.rover = RoverSettings(raw)
     self.timing = TimingSettings(raw)
-    self.controller_name = as_str(raw, "controller_name", "Xbox Wireless Controller")
-    aliases = raw.get("controller_name_aliases") or []
-    self.controller_name_aliases = list(aliases) if isinstance(aliases, list) else []
-    self.controller_mac = as_str(raw, "controller_mac", "").upper()
-    self.bluetooth_scan_timeout_sec = as_float(raw, "bluetooth_scan_timeout_sec", 20.0)
-    self.mapping = dict(section(raw, "mapping"))
-    self.evdev = dict(section(raw, "evdev"))
+    self.mapping = MappingSettings(raw)
+    self.evdev = EvdevSettings(raw)
 
   @classmethod
-  def from_dict(cls, raw: dict) -> AppConfig:
-    return cls(raw)
+  def from_dict(cls, raw: dict) -> "AppConfig":
+    """Build from a loaded JSON object (JSON → object only; never the reverse)."""
+    return cls(raw if isinstance(raw, dict) else {})

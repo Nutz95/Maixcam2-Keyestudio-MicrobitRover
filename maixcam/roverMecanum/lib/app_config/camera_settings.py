@@ -30,4 +30,4 @@ class CameraSettings:
 
   @property
   def display_interval_ms(self) -> int:
-    return max(1, int(1000 / self.display_fps))
+    return max(1, 1000 // self.display_fps)

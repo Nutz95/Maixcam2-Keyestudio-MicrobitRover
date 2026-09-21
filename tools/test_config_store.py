@@ -7,6 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "maixcam", "roverMecanum"))
 
+from lib.app_config import AppConfig
 from lib.config_store import ConfigStore
 
 
@@ -17,9 +18,9 @@ class TestConfigStoreAtomic(unittest.TestCase):
       with open(path, "w", encoding="utf-8") as handle:
         handle.write("")
       store = ConfigStore(path=path)
-      data = store.load()
-      self.assertIsInstance(data, dict)
-      self.assertIn("rover", data)
+      settings = store.load()
+      self.assertIsInstance(settings, AppConfig)
+      self.assertEqual(settings.rover.max_speed, 255)
       with open(path, "r", encoding="utf-8") as handle:
         self.assertTrue(handle.read().strip())
 
@@ -30,7 +31,9 @@ class TestConfigStoreAtomic(unittest.TestCase):
       store.load()
       store.set_controller_mac("aa:bb:cc:dd:ee:ff")
       store2 = ConfigStore(path=path)
-      self.assertEqual(store2.load().get("controller_mac"), "AA:BB:CC:DD:EE:FF")
+      store2.load()
+      self.assertEqual(store2.settings().controller_mac, "AA:BB:CC:DD:EE:FF")
+      self.assertEqual(store2.settings().mapping.dpad.up, "forward")
 
 
 if __name__ == "__main__":

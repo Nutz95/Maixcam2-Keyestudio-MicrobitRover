@@ -92,7 +92,7 @@ class BluetoothctlSession:
 
     pair_out = ""
     seen = ""
-    pair_timeout = float(self._timing.bt_pair_timeout_s)
+    pair_timeout = self._timing.bt_pair_timeout_s
     for attempt in range(2):
       mark = self._mark()
       self.send("scan on")
@@ -135,7 +135,7 @@ class BluetoothctlSession:
     out = self._wait_since(
       mark,
       ("Connection successful", "Failed to connect", "Paired: no"),
-      float(self._timing.bt_connect_timeout_s),
+      self._timing.bt_connect_timeout_s,
     )
     if "Failed to connect" in out or "Paired: no" in out:
       self.send(f"info {mac}")
@@ -159,7 +159,7 @@ class BluetoothctlSession:
     self._wait_since(
       mark0,
       ("Device has been removed", "not available", "Failed to disconnect"),
-      float(self._timing.bt_remove_timeout_s),
+      self._timing.bt_remove_timeout_s,
     )
 
   def _remove_device(self, mac):
@@ -169,7 +169,7 @@ class BluetoothctlSession:
     self._wait_since(
       mark,
       ("Device has been removed", "not available"),
-      float(self._timing.bt_remove_timeout_s),
+      self._timing.bt_remove_timeout_s,
     )
 
   def _wait_pairing_ready(self, mac, mark, timeout_s):
@@ -192,7 +192,7 @@ class BluetoothctlSession:
     self._wait_since(
       mark,
       ("ServicesResolved: yes", "00001812-", "Human Interface Device"),
-      float(self._timing.bt_connect_timeout_s),
+      self._timing.bt_connect_timeout_s,
     )
 
   def scan_for_device_name(self, name, timeout_sec=20.0, aliases=None):
@@ -213,7 +213,7 @@ class BluetoothctlSession:
 
     mark = self._mark()
     self.send("scan on")
-    deadline = time.time() + max(3.0, float(timeout_sec))
+    deadline = time.time() + max(3.0, timeout_sec)
     next_devices = time.time() + 3.0
     mac = ""
     poll_s = self._timing.sleep_s(self._timing.bt_scan_poll_ms)

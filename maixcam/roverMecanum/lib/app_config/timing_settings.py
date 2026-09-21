@@ -45,4 +45,4 @@ class TimingSettings:
     self.bt_remove_timeout_s = max(2, as_int(timing, "bt_remove_timeout_s", 8))
 
   def sleep_s(self, ms: int) -> float:
-    return max(0.0, float(ms) / 1000.0)
+    return max(0.0, ms / 1000.0)

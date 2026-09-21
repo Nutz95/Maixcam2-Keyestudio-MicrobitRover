@@ -32,3 +32,10 @@ def as_bool(block: dict, key: str, default: bool) -> bool:
 def as_str(block: dict, key: str, default: str) -> str:
   value = block.get(key, default)
   return default if value is None else str(value)
+
+
+def as_str_list(block: dict, key: str) -> list:
+  value = block.get(key, [])
+  if not isinstance(value, list):
+    return []
+  return [str(item) for item in value if item is not None]

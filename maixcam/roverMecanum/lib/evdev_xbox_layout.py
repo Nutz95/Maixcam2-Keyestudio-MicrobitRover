@@ -16,21 +16,21 @@ class XboxAxisLayout:
     self.rt = rt
 
   @classmethod
-  def detect(cls, sysfs, event_path, evdev_config=None):
-    evdev_config = evdev_config or {}
-    if cls._has_explicit_codes(evdev_config):
+  def detect(cls, sysfs, event_path, evdev_settings=None):
+    """Pick ABS codes from typed EvdevSettings, or auto-detect."""
+    if evdev_settings is not None and evdev_settings.has_explicit_codes():
       layout = cls(
-        int(evdev_config["left_x"]),
-        int(evdev_config["left_y"]),
-        int(evdev_config["right_x"]),
-        int(evdev_config["right_y"]),
-        int(evdev_config["lt"]),
-        int(evdev_config["rt"]),
+        evdev_settings.left_x,
+        evdev_settings.left_y,
+        evdev_settings.right_x,
+        evdev_settings.right_y,
+        evdev_settings.lt,
+        evdev_settings.rt,
       )
       cls._log_layout(layout, "config")
       return layout
 
-    layout_profile = evdev_config.get("layout", "auto")
+    layout_profile = "auto" if evdev_settings is None else evdev_settings.layout
     if layout_profile == "standard":
       layout = cls(ABS_X, ABS_Y, ABS_RX, ABS_RY, ABS_Z, ABS_RZ)
       cls._log_layout(layout, "standard")
@@ -95,11 +95,6 @@ class XboxAxisLayout:
         return ABS_Z, ABS_RZ
 
     return ABS_Z, ABS_RZ
-
-  @staticmethod
-  def _has_explicit_codes(evdev_config):
-    keys = ("left_x", "left_y", "right_x", "right_y", "lt", "rt")
-    return all(key in evdev_config for key in keys)
 
   @staticmethod
   def _is_trigger_range(min_v, max_v):

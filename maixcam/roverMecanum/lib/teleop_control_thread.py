@@ -14,17 +14,17 @@ class TeleopControlThread:
     self._xbox = xbox
     self._rover = rover
     self._send_drive = send_drive
-    self._send_interval_ms = max(5, int(send_interval_ms))
-    self._poll_sleep_ms = max(1, int(poll_sleep_ms))
+    self._send_interval_ms = max(5, send_interval_ms)
+    self._poll_sleep_ms = max(1, poll_sleep_ms)
     self._on_tick = on_tick
     self._stop = threading.Event()
     self._thread = None
 
   def set_send_interval_ms(self, ms):
-    self._send_interval_ms = max(5, int(ms))
+    self._send_interval_ms = max(5, ms)
 
   def set_poll_sleep_ms(self, ms):
-    self._poll_sleep_ms = max(1, int(ms))
+    self._poll_sleep_ms = max(1, ms)
 
   def start(self):
     if self._thread is not None and self._thread.is_alive():

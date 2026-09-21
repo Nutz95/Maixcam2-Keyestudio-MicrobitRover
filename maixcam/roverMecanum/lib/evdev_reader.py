@@ -20,24 +20,18 @@ _VALID_EV_TYPES = {0, 1, 2, 3, 4, 0x11, 0x14, 0x15, 0x17}
 class EvdevReader:
   """Read Xbox evdev events (teleop thread only)."""
 
-  def __init__(self, event_path, config=None):
+  def __init__(self, event_path, evdev_settings=None, drain_max_events=24):
     self.event_path = event_path
-    self._config = config or {}
     self.state = ControllerState()
     self._sysfs = EvdevSysfsReader()
-    evdev_config = self._config.get("evdev", {})
-    self._layout = XboxAxisLayout.detect(self._sysfs, event_path, evdev_config)
+    self._layout = XboxAxisLayout.detect(self._sysfs, event_path, evdev_settings)
     self._ev_struct, self._ev_size = self._detect_event_size(event_path)
     self._mappers = {}
     self._observed = {}
     self._file = None
     self.event_count = 0
     self.kernel_state_available = False
-    timing = (config or {}).get("timing", {})
-    try:
-      self._drain_max = max(1, int(timing.get("evdev_drain_max_events", 24)))
-    except (TypeError, ValueError):
-      self._drain_max = 24
+    self._drain_max = drain_max_events
     self._lt_btn = 0
     self._rt_btn = 0
     self._dpad_x = 0
