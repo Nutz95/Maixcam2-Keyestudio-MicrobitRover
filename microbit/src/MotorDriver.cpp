@@ -17,7 +17,16 @@ MecanumCarDriver::MecanumCarDriver() {
 void MecanumCarDriver::begin() {
     Wire.begin();
     set_all_pwm(0);
+    // Keyestudio STC driver: channels 9/10 are the front seven-color LEDs.
+    // Default power-on can leave them lit (red-ish), which poisons red blob vision.
+    set_front_leds(false);
     delay(5);
+}
+
+void MecanumCarDriver::set_front_leds(bool on) {
+    const uint8_t level = on ? 1 : 0;
+    set_pwm(9, level);
+    set_pwm(10, level);
 }
 
 void MecanumCarDriver::set_pwm(uint8_t channel, uint8_t value) {

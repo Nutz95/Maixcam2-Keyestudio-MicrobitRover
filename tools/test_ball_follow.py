@@ -55,8 +55,8 @@ class TestBallFollow(unittest.TestCase):
     self.assertNotEqual(command.spin, 0)
     self.assertEqual(command.forward, 0)
     self.assertEqual(command.reason, "align")
-    # Breakaway floor: small visual error still clears motor static friction.
-    self.assertGreaterEqual(abs(command.spin), self.settings.min_spin_axis)
+    # Soft progressive floor: still moves, but may sit under hard min_spin when barely off-center.
+    self.assertGreaterEqual(abs(command.spin), int(self.settings.min_spin_axis * 0.55))
 
   def test_small_high_ball_approaches(self):
     policy = BallFollowPolicy(self.settings)
@@ -67,7 +67,7 @@ class TestBallFollow(unittest.TestCase):
     self.assertLess(command.forward, 0)
     self.assertEqual(command.spin, 0)
     self.assertEqual(command.reason, "approach")
-    self.assertGreaterEqual(abs(command.forward), self.settings.min_forward_axis)
+    self.assertGreaterEqual(abs(command.forward), int(self.settings.min_forward_axis * 0.55))
 
   def test_large_low_ball_reverses(self):
     policy = BallFollowPolicy(self.settings)
@@ -112,6 +112,23 @@ class TestBallFollow(unittest.TestCase):
     self.assertEqual(still_paused.reason, "search_pause")
     self.assertEqual(after_pause.reason, "search_retreat")
     self.assertNotEqual(after_pause.forward, 0)
+
+  def test_search_turn_closes_on_yaw_delta(self):
+    settings = BallFollowSettings({"ball_follow": {"search_turn_deg": 90}})
+    policy = BallFollowPolicy(settings)
+    left_side = BallObservation(100, 250, 40, 40, 1200, 1200.0, 1000, 640, 480)
+    policy.decide(left_side, 1000)
+    policy.decide(None, 3100, yaw_deg=10.0)
+
+    still_turning = policy.decide(None, 3200, yaw_deg=40.0)
+    finished = policy.decide(None, 3300, yaw_deg=110.0)
+
+    self.assertEqual(still_turning.reason, "search")
+    self.assertEqual(finished.reason, "search_pause")
+
+  def test_yaw_delta_wraps_shortest_path(self):
+    self.assertAlmostEqual(BallFollowPolicy.yaw_delta_deg(350.0, 10.0), 20.0)
+    self.assertAlmostEqual(BallFollowPolicy.yaw_delta_deg(10.0, 350.0), -20.0)
 
   def test_search_follows_rightward_exit_trajectory(self):
     policy = BallFollowPolicy(self.settings)
@@ -167,6 +184,33 @@ class TestBallFollow(unittest.TestCase):
     self.assertEqual(red, [[0, 81, 40, 81, 10, 80]])
     self.assertTrue(all(isinstance(value, int) for row in green for value in row))
 
+  def test_distance_hold_avoids_approach_retreat_chatter(self):
+    policy = BallFollowPolicy(self.settings)
+    # In the stop band: should hold, then stay held until clearly farther.
+    in_band = BallObservation(320, 240, 100, 100, 8000, 8000.0, 1000, 640, 480)
+    first = policy.decide(in_band, 1000)
+    still = policy.decide(
+      BallObservation(320, 240, 95, 95, 7500, 7500.0, 1050, 640, 480),
+      1050,
+    )
+    self.assertEqual(first.reason, "target_distance")
+    self.assertEqual(still.reason, "target_distance")
+    self.assertEqual(still.forward, 0)
+
+  def test_approach_is_gentler_when_near_target(self):
+    policy_far = BallFollowPolicy(self.settings)
+    policy_near = BallFollowPolicy(self.settings)
+    far = BallObservation(320, 80, 16, 16, 200, 200.0, 1000, 640, 480)
+    # Still below target band, but closer than the tiny far blob.
+    near = BallObservation(320, 180, 70, 70, 4000, 4000.0, 1000, 640, 480)
+
+    far_cmd = policy_far.decide(far, 1000)
+    near_cmd = policy_near.decide(near, 1000)
+
+    self.assertEqual(far_cmd.reason, "approach")
+    self.assertEqual(near_cmd.reason, "approach")
+    self.assertGreater(abs(far_cmd.forward), abs(near_cmd.forward))
+
   def test_align_spin_is_damped_when_ball_returns_to_center(self):
     policy = BallFollowPolicy(self.settings)
     # Far-right ball sliding left: PD output stays above the breakaway floor.
@@ -182,7 +226,7 @@ class TestBallFollow(unittest.TestCase):
 
     self.assertEqual(static_cmd.reason, "align")
     self.assertEqual(damped_cmd.reason, "align")
-    self.assertGreaterEqual(static_cmd.spin, self.settings.min_spin_axis)
+    self.assertGreaterEqual(static_cmd.spin, int(self.settings.min_spin_axis * 0.55))
     self.assertLessEqual(damped_cmd.spin, static_cmd.spin)
 
   def test_controller_cycles_green_and_red(self):

@@ -38,6 +38,7 @@ class BallFollowSettings:
     "max_retreat_axis",
     "search_spin_axis",
     "search_turn_ms",
+    "search_turn_deg",
     "search_pause_ms",
     "search_retreat_ms",
     "search_retreat_axis",
@@ -63,10 +64,10 @@ class BallFollowSettings:
     self.image_center_x_ratio = self._ratio(follow, "image_center_x_ratio", 0.5)
     self.target_height_ratio = self._ratio(follow, "target_height_ratio", 0.22)
     self.target_tolerance_ratio = self._ratio(
-      follow, "target_tolerance_ratio", 0.04,
+      follow, "target_tolerance_ratio", 0.07,
     )
     self.too_close_height_ratio = self._ratio(
-      follow, "too_close_height_ratio", 0.38,
+      follow, "too_close_height_ratio", 0.40,
     )
     self.far_center_y_ratio = self._ratio(follow, "far_center_y_ratio", 0.28)
     self.too_close_center_y_ratio = self._ratio(
@@ -79,9 +80,9 @@ class BallFollowSettings:
     self.velocity_timeout_ms = max(
       100, as_int(follow, "velocity_timeout_ms", 1000),
     )
-    self.spin_gain = max(1.0, as_float(follow, "spin_gain", 16000.0))
-    self.spin_damping = max(0.0, as_float(follow, "spin_damping", 2200.0))
-    self.forward_gain = max(1.0, as_float(follow, "forward_gain", 36000.0))
+    self.spin_gain = max(1.0, as_float(follow, "spin_gain", 14000.0))
+    self.spin_damping = max(0.0, as_float(follow, "spin_damping", 2800.0))
+    self.forward_gain = max(1.0, as_float(follow, "forward_gain", 30000.0))
     # Vision uses linear+floor shaping (not joystick expo). Floor clears motor breakaway.
     self.max_spin_axis = max(1, min(32767, as_int(follow, "max_spin_axis", 9000)))
     self.min_spin_axis = max(
@@ -96,18 +97,20 @@ class BallFollowSettings:
     self.max_retreat_axis = max(
       1, min(self.max_forward_axis, as_int(follow, "max_retreat_axis", 6500)),
     )
-    # Search spin clears breakaway; turn duration is timed (no gyro yet).
+    # Search spin clears breakaway; prefer yaw-closed turn when IMU is ready.
     self.search_spin_axis = max(
       1, min(32767, as_int(follow, "search_spin_axis", 8000)),
     )
     self.search_turn_ms = max(500, as_int(follow, "search_turn_ms", 2200))
+    # Slightly under 360° so search stops before a full wrap overshoots.
+    self.search_turn_deg = max(0.0, min(720.0, as_float(follow, "search_turn_deg", 350.0)))
     self.search_pause_ms = max(0, as_int(follow, "search_pause_ms", 800))
     self.search_retreat_ms = max(200, as_int(follow, "search_retreat_ms", 700))
     self.search_retreat_axis = max(
       1, min(self.max_retreat_axis, as_int(follow, "search_retreat_axis", 4500)),
     )
     self.horizontal_deadzone = self._ratio(
-      follow, "horizontal_deadzone", 0.14,
+      follow, "horizontal_deadzone", 0.15,
     )
     self.lost_search_ms = max(500, as_int(follow, "lost_search_ms", 2000))
     # Prediction amplifies oscillation while the robot itself is spinning; default off.

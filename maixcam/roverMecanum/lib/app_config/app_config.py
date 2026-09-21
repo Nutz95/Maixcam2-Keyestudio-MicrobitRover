@@ -2,6 +2,7 @@
 
 from lib.app_config.camera_settings import CameraSettings
 from lib.app_config.evdev_settings import EvdevSettings
+from lib.app_config.imu_settings import ImuSettings
 from lib.ball_follow_settings import BallFollowSettings
 from lib.app_config.mapping_settings import MappingSettings
 from lib.config_parse_helpers import as_float, as_int, as_str, as_str_list
@@ -24,6 +25,7 @@ class AppConfig:
     "mapping",
     "evdev",
     "ball_follow",
+    "imu",
   )
 
   def __init__(self, raw: dict):
@@ -38,6 +40,7 @@ class AppConfig:
     self.mapping = MappingSettings(raw)
     self.evdev = EvdevSettings(raw)
     self.ball_follow = BallFollowSettings(raw)
+    self.imu = ImuSettings(raw)
 
   @classmethod
   def from_dict(cls, raw: dict) -> "AppConfig":

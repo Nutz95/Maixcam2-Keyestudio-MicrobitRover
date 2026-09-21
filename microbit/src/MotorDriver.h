@@ -10,6 +10,7 @@ public:
     void begin();
     void set_pwm(uint8_t channel, uint8_t value);
     void set_all_pwm(uint8_t value);
+    void set_front_leds(bool on);
 
     void motor_upper_left(uint8_t forward, uint8_t speed);
     void motor_lower_left(uint8_t forward, uint8_t speed);

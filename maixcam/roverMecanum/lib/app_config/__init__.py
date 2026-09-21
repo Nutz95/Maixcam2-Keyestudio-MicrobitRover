@@ -5,6 +5,7 @@ from lib.app_config.button_mapping import ButtonMapping
 from lib.app_config.camera_settings import CameraSettings
 from lib.app_config.dpad_mapping import DpadMapping
 from lib.app_config.evdev_settings import EvdevSettings
+from lib.app_config.imu_settings import ImuSettings
 from lib.ball_follow_settings import BallFollowSettings
 from lib.app_config.invert_settings import InvertSettings
 from lib.app_config.mapping_settings import MappingSettings
@@ -18,6 +19,7 @@ __all__ = (
   "CameraSettings",
   "DpadMapping",
   "EvdevSettings",
+  "ImuSettings",
   "InvertSettings",
   "MappingSettings",
   "RoverSettings",

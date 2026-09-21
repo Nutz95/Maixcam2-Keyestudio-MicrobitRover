@@ -28,6 +28,9 @@ def main():
   assert app_config.mapping.buttons.btn_a == raw["mapping"]["buttons"]["btn_a"]
   assert app_config.evdev.layout == raw["evdev"]["layout"]
   assert app_config.ball_follow.target_height_ratio == raw["ball_follow"]["target_height_ratio"]
+  assert app_config.imu.enabled == raw["imu"]["enabled"]
+  assert app_config.imu.calib_ms == raw["imu"]["calib_ms"]
+  assert app_config.ball_follow.search_turn_deg == raw["ball_follow"]["search_turn_deg"]
   assert app_config.camera.fps == 60
   assert not hasattr(app_config, "raw")
   assert not hasattr(app_config, "to_dict")

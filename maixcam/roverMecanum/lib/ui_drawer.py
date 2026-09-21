@@ -18,6 +18,9 @@ class UiDrawer:
     pad = 8
     back_size = 44
     self._back_pad = [pad, pad, back_size, back_size]
+    # Always-available gyro calib (top-right; works before Xbox connect).
+    gyro_w = 96
+    self._gyro_top_rect = [self.width - pad - gyro_w, pad, gyro_w, back_size]
     # Finger-sized (MaixAiRover): ~72 px tall, full bottom half-width each.
     btn_h = 72
     gap = 12
@@ -26,6 +29,7 @@ class UiDrawer:
     self._pair_rect = [gap, y, half_w, btn_h]
     self._connect_rect = [gap * 2 + half_w, y, half_w, btn_h]
     self._disconnect_rect = [gap, y, half_w, btn_h]
+    self._gyro_rect = [gap * 2 + half_w, y, half_w, btn_h]
     self._bottom_bar_top = y - 10
 
   def back_rect(self):
@@ -40,6 +44,12 @@ class UiDrawer:
   def disconnect_rect(self):
     return list(self._disconnect_rect)
 
+  def gyro_rect(self):
+    return list(self._gyro_rect)
+
+  def gyro_top_rect(self):
+    return list(self._gyro_top_rect)
+
   def draw_overlay(
     self,
     img,
@@ -51,6 +61,7 @@ class UiDrawer:
     status="",
     progress=0.0,
     ball_snapshot=None,
+    imu_snapshot=None,
   ):
     """Draw HUD: speed bar, sticks, triggers, d-pad, pairing progress, buttons."""
     bx, by, bw, bh = self._back_pad
@@ -59,9 +70,17 @@ class UiDrawer:
     icon_y = by + (bh - self._img_back.height()) // 2
     img.draw_image(icon_x, icon_y, self._img_back)
 
+    calibrating = imu_snapshot is not None and imu_snapshot.calibrating
+    if calibrating:
+      self._draw_gyro_calib_overlay(img, imu_snapshot)
+      return
+
+    self._draw_gyro_button(img, self.gyro_top_rect(), imu_snapshot, compact=True)
+
     if connected:
       self._draw_bottom_bar(img)
       self._draw_button(img, self.disconnect_rect(), "DISCONNECT", image.Color.from_rgb(180, 60, 40))
+      self._draw_gyro_button(img, self.gyro_rect(), imu_snapshot, compact=False)
       lb = state.buttons.get("btn_lb", False)
       rb = state.buttons.get("btn_rb", False)
       self._draw_speed_bar(img, max_speed, lb, rb)
@@ -101,6 +120,8 @@ class UiDrawer:
     if ball_snapshot is not None:
       self._draw_ball_status(img, ball_snapshot)
       self._draw_ball_observation(img, ball_snapshot)
+    if imu_snapshot is not None:
+      self._draw_imu_status(img, imu_snapshot)
 
   def _draw_ball_status(self, img, ball_snapshot: BallFollowSnapshot):
     """Draw a large, high-contrast permanent control-mode indicator."""
@@ -117,6 +138,105 @@ class UiDrawer:
     img.draw_rect(x, y, size.width() + 16, size.height() + 12, background, thickness=-1)
     img.draw_rect(x, y, size.width() + 16, size.height() + 12, image.COLOR_WHITE, thickness=2)
     img.draw_string(x + 8, y + 6, label, image.COLOR_WHITE, scale=1.4, thickness=2)
+
+  def _draw_gyro_button(self, img, rect, imu_snapshot, compact=False):
+    """GYRO calib control; color reflects calibration state."""
+    if imu_snapshot is None:
+      color = image.Color.from_rgb(80, 80, 80)
+      label = "GYRO"
+    elif imu_snapshot.calibrating:
+      color = image.Color.from_rgb(180, 120, 20)
+      label = "HOLD" if compact else "HOLD STILL"
+    elif imu_snapshot.calibrated:
+      color = image.Color.from_rgb(40, 120, 60)
+      label = "GYRO"
+    elif imu_snapshot.status in ("no_imu", "disabled"):
+      color = image.Color.from_rgb(80, 80, 80)
+      label = "GYRO"
+    else:
+      color = image.Color.from_rgb(160, 80, 20)
+      label = "GYRO"
+    self._draw_button(img, rect, label, color)
+
+  def _draw_imu_status(self, img, imu_snapshot):
+    """Compact yaw / calib line under the speed bar, top-right."""
+    if imu_snapshot.yaw_deg is not None and imu_snapshot.calibrated:
+      text = f"YAW {imu_snapshot.yaw_deg:.0f}"
+    else:
+      text = f"IMU {imu_snapshot.status}"
+    size = image.string_size(text, scale=1.0)
+    x = max(8, self.width - size.width() - 8)
+    img.draw_string(x, 78, text, image.COLOR_WHITE, scale=1.0)
+
+  def _draw_gyro_calib_overlay(self, img, imu_snapshot):
+    """Fullscreen calib UI: hide sticks, show hold-still + timed progress."""
+    img.draw_rect(
+      0, 0, self.width, self.height,
+      image.Color.from_rgb(0, 0, 0), thickness=-1,
+    )
+    bx, by, bw, bh = self._back_pad
+    img.draw_rect(bx, by, bw, bh, image.Color.from_rgb(40, 40, 40), thickness=-1)
+    icon_x = bx + (bw - self._img_back.width()) // 2
+    icon_y = by + (bh - self._img_back.height()) // 2
+    img.draw_image(icon_x, icon_y, self._img_back)
+
+    # ASCII only: MaixPy default font drops many Unicode glyphs.
+    title = "GYRO CALIBRATION"
+    title_size = image.string_size(title, scale=1.6, thickness=2)
+    img.draw_string(
+      (self.width - title_size.width()) // 2,
+      120,
+      title,
+      image.COLOR_WHITE,
+      scale=1.6,
+      thickness=2,
+    )
+    hold = "HOLD STILL - DO NOT MOVE"
+    hold_size = image.string_size(hold, scale=1.4, thickness=2)
+    img.draw_string(
+      (self.width - hold_size.width()) // 2,
+      180,
+      hold,
+      image.Color.from_rgb(255, 220, 60),
+      scale=1.4,
+      thickness=2,
+    )
+
+    pct = max(0.0, min(1.0, float(imu_snapshot.calib_progress)))
+    pct_label = f"{int(pct * 100)}%"
+    pct_size = image.string_size(pct_label, scale=2.0, thickness=2)
+    img.draw_string(
+      (self.width - pct_size.width()) // 2,
+      250,
+      pct_label,
+      image.COLOR_WHITE,
+      scale=2.0,
+      thickness=2,
+    )
+
+    bar_x = 32
+    bar_w = self.width - 64
+    bar_y = 320
+    bar_h = 36
+    img.draw_rect(bar_x, bar_y, bar_w, bar_h, image.Color.from_rgb(50, 50, 50), thickness=-1)
+    img.draw_rect(bar_x, bar_y, bar_w, bar_h, image.COLOR_WHITE, thickness=3)
+    fill = int((bar_w - 8) * pct)
+    if fill > 0:
+      img.draw_rect(
+        bar_x + 4, bar_y + 4, fill, bar_h - 8,
+        image.Color.from_rgb(40, 200, 80), thickness=-1,
+      )
+
+    tip = "Motors stopped  Xbox ignored"
+    tip_size = image.string_size(tip, scale=1.2, thickness=2)
+    img.draw_string(
+      (self.width - tip_size.width()) // 2,
+      380,
+      tip,
+      image.Color.from_rgb(200, 200, 200),
+      scale=1.2,
+      thickness=2,
+    )
 
   def _draw_ball_observation(self, img, ball_snapshot: BallFollowSnapshot):
     """Draw the selected blob, its recent trajectory, and policy reason."""

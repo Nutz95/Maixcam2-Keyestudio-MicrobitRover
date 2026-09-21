@@ -11,6 +11,7 @@ files:
   - lib\app_config\camera_settings.py
   - lib\app_config\dpad_mapping.py
   - lib\app_config\evdev_settings.py
+  - lib\app_config\imu_settings.py
   - lib\app_config\invert_settings.py
   - lib\app_config\mapping_settings.py
   - lib\app_config\rover_settings.py
@@ -51,6 +52,8 @@ files:
   - lib\evdev_sysfs_reader.py
   - lib\evdev_trigger_mapper.py
   - lib\evdev_xbox_layout.py
+  - lib\imu_snapshot.py
+  - lib\imu_yaw_service.py
   - lib\paths.py
   - lib\rover_uart_client.py
   - lib\scan_match_result.py

@@ -70,7 +70,7 @@ class BallFollowController:
       self._trajectory.clear()
       self._command = BallFollowCommand(reason="settings_reloaded")
 
-  def update(self, frame) -> BallFollowCommand:
+  def update(self, frame, yaw_deg=None) -> BallFollowCommand:
     """Detect the latest frame and return one safe automatic command."""
     with self._lock:
       if not self._enabled:
@@ -85,7 +85,7 @@ class BallFollowController:
     except Exception as detect_error:
       print(f"ball: detection failed: {detect_error}")
       observation = None
-    command = policy.decide(observation, now_ms)
+    command = policy.decide(observation, now_ms, yaw_deg=yaw_deg)
     with self._lock:
       self._observation = observation
       if observation is not None:

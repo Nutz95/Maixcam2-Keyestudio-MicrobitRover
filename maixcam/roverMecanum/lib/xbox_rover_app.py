@@ -6,6 +6,7 @@ from lib.ball_follow_controller import BallFollowController
 from lib.bluetooth_installer import BluetoothInstaller
 from lib.camera_preview_service import CameraPreviewService
 from lib.config_store import ConfigStore
+from lib.imu_yaw_service import ImuYawService
 from lib.rover_uart_client import RoverUartClient
 from lib.teleop_control_thread import TeleopControlThread
 from lib.uart_initializer import UartInitializer
@@ -19,6 +20,7 @@ class XboxRoverApp:
 
   Threads:
   - teleop-ctrl: evdev poll + UART (background)
+  - imu-yaw: Mahony yaw + gyro calib (background)
   - main: touch + HUD draw + display.show (Maix display API is main-thread)
   """
 
@@ -37,6 +39,8 @@ class XboxRoverApp:
     print(BluetoothInstaller().install())
     self._xbox = XboxInputService(self._config_store)
     self._ball_follow = BallFollowController(cfg.ball_follow)
+    self._imu = ImuYawService(cfg.imu)
+    self._imu_settings = cfg.imu
     self._disp = display.Display()
     self._ui = UiDrawer(self._disp.width(), self._disp.height())
     self._ts = touchscreen.TouchScreen()
@@ -69,6 +73,7 @@ class XboxRoverApp:
   def run(self):
     """Teleop in background; main thread draws the HUD and calls display.show."""
     self._start_camera()
+    self._imu.start()
     self._control.start()
     loop_sleep_s = self._timing.main_loop_sleep_ms / 1000.0
     try:
@@ -101,6 +106,9 @@ class XboxRoverApp:
     if cfg.ball_follow is not self._ball_follow_settings:
       self._ball_follow.apply_settings(cfg.ball_follow)
       self._ball_follow_settings = cfg.ball_follow
+    if cfg.imu is not self._imu_settings:
+      self._imu.apply_settings(cfg.imu)
+      self._imu_settings = cfg.imu
     rover = cfg.rover
     if rover.max_speed != self._config_max_speed:
       self._config_max_speed = rover.max_speed
@@ -112,6 +120,9 @@ class XboxRoverApp:
 
   def _toggle_ball_follow(self):
     """Toggle automatic mode from one Xbox View/Select press."""
+    if self._imu.snapshot().calibrating:
+      print("ball: ignored while gyro calibrating")
+      return
     enabled = not self._ball_follow.enabled
     self._ball_follow.set_enabled(enabled)
     self._rover.send_stop()
@@ -124,6 +135,21 @@ class XboxRoverApp:
     if self._ball_follow.enabled:
       self._rover.send_stop()
     print(f"ball: color={color}")
+
+  def _start_gyro_calib(self):
+    """Stop motion and queue MaixPy calib_gyro on the IMU thread."""
+    snap = self._imu.snapshot()
+    if snap.calibrating:
+      return
+    if snap.status in ("disabled", "no_imu", "off", "stopped"):
+      print(f"imu: calib unavailable ({snap.status})")
+      return
+    if self._ball_follow.enabled:
+      self._ball_follow.set_enabled(False)
+      self._manual_resume_pending = True
+    self._rover.send_stop()
+    print("imu: hold still — calibrating gyro bias")
+    self._imu.request_calib()
 
   def _handle_speed_bumpers(self):
     if not self._xbox.connected_drive().connected:
@@ -153,6 +179,7 @@ class XboxRoverApp:
     self._exit.set()
     self._ball_follow.set_enabled(False)
     self._control.stop()
+    self._imu.stop()
     self._xbox.close()
     try:
       self._rover.send_stop()
@@ -180,6 +207,7 @@ class XboxRoverApp:
   def _draw_frame(self):
     snap = self._xbox.snapshot()
     ball_snap = self._ball_follow.snapshot()
+    imu_snap = self._imu.snapshot()
     if self._camera is not None:
       self._camera.set_paused(bool(snap.busy and not snap.connected))
 
@@ -195,6 +223,7 @@ class XboxRoverApp:
       frame, snap.connected, snap.busy, snap.state, snap.drive, self._session_max_speed,
       status=snap.status, progress=snap.progress,
       ball_snapshot=ball_snap,
+      imu_snapshot=imu_snap,
     )
     self._disp.show(frame)
 
@@ -252,6 +281,10 @@ class XboxRoverApp:
       app.set_exit_flag(True)
       return
 
+    if self._in_rect(x, y, self._ui.gyro_top_rect()):
+      self._start_gyro_calib()
+      return
+
     if not snap.busy and not snap.connected:
       if self._in_rect(x, y, self._ui.pair_rect()):
         self._xbox.start_pairing()
@@ -262,14 +295,23 @@ class XboxRoverApp:
     if snap.connected and self._in_rect(x, y, self._ui.disconnect_rect()):
       self._xbox.request_stop()
       self._rover.send_stop()
+      return
+
+    if snap.connected and self._in_rect(x, y, self._ui.gyro_rect()):
+      self._start_gyro_calib()
 
   def _send_drive(self, drive):
     """UART joystick/preset to micro:bit (protocol unchanged)."""
+    imu_snap = self._imu.snapshot()
+    if imu_snap.calibrating:
+      self._rover.send_stop()
+      return
     if self._ball_follow.enabled:
       frame = None
       if self._camera is not None and self._camera.ready:
         frame = self._camera.get_frame()
-      command = self._ball_follow.update(frame)
+      yaw_deg = imu_snap.yaw_deg if imu_snap.ready else None
+      command = self._ball_follow.update(frame, yaw_deg=yaw_deg)
       self._rover.send_joystick(0, command.forward, command.spin, 0)
       return
     if self._manual_resume_pending:

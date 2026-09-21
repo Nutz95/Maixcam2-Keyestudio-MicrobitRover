@@ -26,11 +26,9 @@ The first controller is intentionally sequential:
 3. Retreat when the ball is too large or too low in the image.
 4. Stop inside the target distance band.
 5. Stop for two seconds when the target is lost.
-6. Search with one timed turn toward the last exit side/trajectory.
+6. Search with one turn toward the last exit side/trajectory (`search_turn_deg`
+   when IMU yaw is ready, else `search_turn_ms`).
 7. Pause, reverse briefly (ball may be under the camera), pause, then turn again.
-
-Without a yaw/gyro measurement, "one turn" is timed (`search_turn_ms`) and must be
-calibrated on the robot. A gyro-closed turn is a later upgrade.
 
 Closed-loop control is intentional: every teleop tick runs detect → decide →
 UART. Oscillation is a gain/delay problem, not a reason to freeze motors while
@@ -41,7 +39,31 @@ Motor shaping differs from teleop: Xbox sticks use `rover.axis_curve` (usually
 `expo`, soft center). Ball-follow uses a **linear** visual error with a
 **breakaway floor** (`min_spin_axis` / `min_forward_axis`) so small corrections
 still clear static friction, and a lower `max_retreat_axis` so too-close reverse
-is less brutal than approach.
+is less brutal than approach. Floor and ceiling also **scale with error size**
+(far → full authority, near target/center → softer) so the rover eases in
+instead of kicking at the same PWM for every correction.
+
+## IMU yaw
+
+`ImuYawService` runs Mahony AHRS on a worker thread (MaixPy `imu.IMU` +
+`ahrs.MahonyAHRS`). On start it loads a saved gyro bias when present; otherwise
+the HUD shows `need_calib`.
+
+During gyro calibration the HUD switches to a fullscreen ASCII "HOLD STILL"
+screen with a live percent + progress bar. Sampling is cooperative so the bar
+can animate (MaixPy ``calib_gyro`` alone freezes the UI). Joystick overlays are
+hidden; motors stay stopped; Xbox drive input is ignored.
+
+When yaw is ready, lost-ball search rotates until `|Δyaw| >= search_turn_deg`
+(default 350°), with a `3 × search_turn_ms` safety timeout. Without a usable
+yaw sample, search falls back to the timed turn.
+
+Still later (not in v1): breakaway probe from yaw-rate, and plant-ID seeding of
+spin gains.
+
+Camera tilt (~20°) mainly affects pitch/roll gravity axes and ground-plane
+geometry. For yaw-only rotation control, calibrated gyro-Z / AHRS yaw is enough;
+a full body↔camera quaternion is not required.
 
 The command contains only `forward` and `spin`; strafe and pivot remain zero.
 This avoids asking the mecanum mixer to solve several uncertain errors at once.
@@ -105,12 +127,12 @@ for YOLO objects and would require an object-detector object conversion for
 blob candidates. The current bounded 80 ms prediction is therefore kept as the
 low-latency first step.
 
-The MaixPy IMU examples expose calibrated `read_all()` data and Mahony yaw
-estimation. The controller does not yet use that stream for closed-loop yaw:
-visual horizontal error remains the correction source and maximum spin is
-limited in configuration. The robot has no implemented shock sensor interface
-in this repository, so impact prevention currently comes from the conservative
-too-close band and immediate stop transitions.
+The MaixPy IMU path is wired through `ImuYawService` for gyro bias calibration
+and yaw-closed search turns. Visual horizontal error remains the primary
+align correction; maximum spin is still limited in configuration. The robot
+has no implemented shock sensor interface in this repository, so impact
+prevention currently comes from the conservative too-close band and immediate
+stop transitions.
 
 ## Calibration procedure
 
