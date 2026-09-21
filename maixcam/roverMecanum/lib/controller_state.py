@@ -22,11 +22,6 @@ class ControllerState:
     if pressed and not was:
       self.pressed_edge[name] = True
 
-  def consume_edges(self):
-    edges = dict(self.pressed_edge)
-    self.pressed_edge.clear()
-    return edges
-
   def take_edge(self, name):
     """Return True once per button press (does not clear other edges)."""
     if self.pressed_edge.get(name):

@@ -1,8 +1,7 @@
 from lib.app_config import AppConfig
 from lib.axis_curve import apply_curve
 from lib.drive_output import DriveOutput
-from lib.protocol_constants import PRESET_ACTIONS
-from lib.uart_protocol import dpad_axes_for_action
+from lib.uart_protocol import PRESET_ACTIONS, dpad_axes_for_action
 
 
 class ControllerMappingEngine:

@@ -32,7 +32,6 @@ class XboxRoverApp:
     self._rover = RoverUartClient(
       serial,
       max_speed=cfg.rover.max_speed,
-      wait_ack=cfg.rover.wait_ack,
     )
     print(BluetoothInstaller().install())
     self._xbox = XboxInputService(self._config_store)

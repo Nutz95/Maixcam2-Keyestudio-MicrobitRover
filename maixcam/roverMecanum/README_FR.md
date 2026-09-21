@@ -143,5 +143,5 @@ Désactiver la caméra : `"enabled": false`.
 |--------|------|
 | `camera_preview_service.py` | Capture 1080p (thread) |
 | `controller_mapping_engine.py` | Manette → forward, strafe, spin, pivot |
-| `joystick_frame_builder.py` | Trame UART |
+| `uart_protocol.py` / `rover_uart_client.py` | Octets de trame UART + envoi série |
 | `ProtocolParser.h` (micro:bit) | `UartIncomingFrame`, noms d’octets explicites |

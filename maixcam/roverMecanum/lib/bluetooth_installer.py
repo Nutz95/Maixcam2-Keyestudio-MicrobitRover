@@ -1,16 +1,14 @@
-import subprocess
+"""Enable Bluetooth on MaixCam2 (BlueZ via bluetoothctl)."""
 
 
 class BluetoothInstaller:
-  """Enable Bluetooth on MaixCam2 (BlueZ via bluetoothctl)."""
+  """Apply MaixCam2 BlueZ workarounds; session owns power/pairable."""
 
   def install(self):
-    """Apply the old-kernel Xbox workaround, then enable BlueZ."""
+    """Apply the old-kernel Xbox workaround; session owns power/pairable."""
     results = []
     results.append(self._disable_ertm())
-    results.append(self._run_shell("bluetoothctl power on"))
-    results.append(self._run_shell("bluetoothctl pairable on"))
-    self._ensure_rc_local()
+    results.append(self._ensure_rc_local())
     return "\n".join(results)
 
   def _disable_ertm(self):
@@ -41,14 +39,3 @@ class BluetoothInstaller:
       return "rc.local: bluetoothctl power on added"
     except OSError as io_error:
       return f"rc.local: skip ({io_error})"
-
-  def _run_shell(self, command):
-    proc = subprocess.run(
-      command,
-      shell=True,
-      capture_output=True,
-      text=True,
-      timeout=120,
-    )
-    out = (proc.stdout or "") + (proc.stderr or "")
-    return out.strip() or f"OK: {command}"

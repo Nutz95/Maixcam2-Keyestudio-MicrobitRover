@@ -99,5 +99,5 @@ Disable with `"enabled": false`.
 |--------|------|
 | `camera_preview_service.py` | 640×480 capture thread (RGB for HUD) |
 | `controller_mapping_engine.py` | Gamepad → forward, strafe, spin, pivot |
-| `joystick_frame_builder.py` | UART frame builder |
+| `uart_protocol.py` / `rover_uart_client.py` | UART frame bytes + serial send |
 | `ProtocolParser.h` (micro:bit) | `UartIncomingFrame`, readable byte names |

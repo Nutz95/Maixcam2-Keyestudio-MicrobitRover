@@ -19,11 +19,7 @@ class MappingSettings:
     axes = section(mapping, "axes")
     self.drive_forward = as_str(axes, "drive_forward", "left_y")
     self.drive_strafe = as_str(axes, "drive_strafe", "trigger_diff")
-    # Legacy alias drive_rotate is only accepted at load time.
-    spin = axes.get("drive_spin")
-    if spin is None:
-      spin = axes.get("drive_rotate", "right_x")
-    self.drive_spin = str(spin)
+    self.drive_spin = as_str(axes, "drive_spin", "right_x")
     self.drive_pivot = as_str(axes, "drive_pivot", "left_x")
     self.invert = InvertSettings(mapping)
     self.dpad = DpadMapping(mapping)
