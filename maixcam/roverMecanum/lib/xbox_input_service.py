@@ -4,6 +4,9 @@ import traceback
 
 from maix import time
 
+from lib.connected_drive import ConnectedDrive
+from lib.speed_edges import SpeedEdges
+from lib.xbox_input_snapshot import XboxInputSnapshot
 from lib.app_config import AppConfig
 from lib.bluetooth_pairing_service import BluetoothPairingService
 from lib.controller_mapping_engine import ControllerMappingEngine
@@ -61,25 +64,30 @@ class XboxInputService:
       f" pivot={mapping.drive_pivot}"
     )
 
-  def consume_speed_edges(self):
+  def consume_speed_edges(self) -> SpeedEdges:
     """LB/RB press edges for session max_speed (one shot per physical press)."""
     with self._lock:
-      lb = self._pending_speed_lb
-      rb = self._pending_speed_rb
+      edges = SpeedEdges(self._pending_speed_lb, self._pending_speed_rb)
       self._pending_speed_lb = False
       self._pending_speed_rb = False
-    return lb, rb
+    return edges
 
-  def snapshot(self):
-    """Return (status, connected, busy, state, drive, progress)."""
+  def snapshot(self) -> XboxInputSnapshot:
+    """Return a named status/drive snapshot for the HUD."""
     with self._lock:
-      state_copy = self.state.copy()
-      return self.status, self.connected, self.busy, state_copy, self.drive, self.progress
+      return XboxInputSnapshot(
+        self.status,
+        self.connected,
+        self.busy,
+        self.state.copy(),
+        self.drive,
+        self.progress,
+      )
 
-  def connected_drive(self):
+  def connected_drive(self) -> ConnectedDrive:
     """Lightweight teleop read — no state copy."""
     with self._lock:
-      return self.connected, self.drive
+      return ConnectedDrive(self.connected, self.drive)
 
   def poll(self):
     """Drain evdev on teleop thread — no config disk I/O here."""

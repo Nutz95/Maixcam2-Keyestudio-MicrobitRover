@@ -101,20 +101,19 @@ class XboxRoverApp:
     self._rover.set_max_speed(self._session_max_speed)
 
   def _handle_speed_bumpers(self):
-    connected, _drive = self._xbox.connected_drive()
-    if not connected:
+    if not self._xbox.connected_drive().connected:
       return
-    lb, rb = self._xbox.consume_speed_edges()
-    if not lb and not rb:
+    edges = self._xbox.consume_speed_edges()
+    if not edges.lb_pressed and not edges.rb_pressed:
       return
     now = time.ticks_ms()
     if now - self._last_speed_change_ms < self._timing.speed_debounce_ms:
       return
     changed = False
-    if lb:
+    if edges.lb_pressed:
       self._session_max_speed = max(10, self._session_max_speed - self._speed_step)
       changed = True
-    if rb:
+    if edges.rb_pressed:
       self._session_max_speed = min(255, self._session_max_speed + self._speed_step)
       changed = True
     if changed:
@@ -153,12 +152,12 @@ class XboxRoverApp:
       print(f"display: {cam.display_fps} fps target")
 
   def _draw_frame(self):
-    status, connected, busy, state, drive, progress = self._xbox.snapshot()
+    snap = self._xbox.snapshot()
     if self._camera is not None:
-      self._camera.set_paused(bool(busy and not connected))
+      self._camera.set_paused(bool(snap.busy and not snap.connected))
 
     frame = None
-    if self._camera is not None and not (busy and not connected):
+    if self._camera is not None and not (snap.busy and not snap.connected):
       frame = self._camera.get_frame()
     if frame is None:
       frame = image.Image(self._disp.width(), self._disp.height(), bg=image.COLOR_BLACK)
@@ -166,8 +165,8 @@ class XboxRoverApp:
       frame = self._drawable_rgb(frame)
 
     self._ui.draw_overlay(
-      frame, connected, busy, state, drive, self._session_max_speed,
-      status=status, progress=progress,
+      frame, snap.connected, snap.busy, snap.state, snap.drive, self._session_max_speed,
+      status=snap.status, progress=snap.progress,
     )
     self._disp.show(frame)
 
@@ -194,14 +193,14 @@ class XboxRoverApp:
     self._touch_was_pressed = bool(pressed)
 
   def _on_connection_change(self):
-    _status, connected, busy, _s, _d, _p = self._xbox.snapshot()
+    snap = self._xbox.snapshot()
     now = time.ticks_ms()
-    if connected != self._was_connected or busy != self._was_busy:
+    if snap.connected != self._was_connected or snap.busy != self._was_busy:
       self._touch_ignore_until = now + self._timing.touch_debounce_ms
       with self._touch_lock:
         self._touch_action = None
-    self._was_connected = connected
-    self._was_busy = busy
+    self._was_connected = snap.connected
+    self._was_busy = snap.busy
 
   def _handle_touch(self):
     if time.ticks_ms() < self._touch_ignore_until:
@@ -216,7 +215,7 @@ class XboxRoverApp:
       return
 
     x, y = action
-    _status, connected, busy, _state, _drive, _progress = self._xbox.snapshot()
+    snap = self._xbox.snapshot()
 
     if self._in_rect(x, y, self._ui.back_rect()):
       self._xbox.request_stop()
@@ -225,14 +224,14 @@ class XboxRoverApp:
       app.set_exit_flag(True)
       return
 
-    if not busy and not connected:
+    if not snap.busy and not snap.connected:
       if self._in_rect(x, y, self._ui.pair_rect()):
         self._xbox.start_pairing()
       elif self._in_rect(x, y, self._ui.connect_rect()):
         self._xbox.start_connect()
       return
 
-    if connected and self._in_rect(x, y, self._ui.disconnect_rect()):
+    if snap.connected and self._in_rect(x, y, self._ui.disconnect_rect()):
       self._xbox.request_stop()
       self._rover.send_stop()
 

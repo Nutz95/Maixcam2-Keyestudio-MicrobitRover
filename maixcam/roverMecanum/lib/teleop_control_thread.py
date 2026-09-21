@@ -46,16 +46,16 @@ class TeleopControlThread:
       if self._on_tick is not None:
         self._on_tick()
       self._xbox.poll()
-      connected, drive = self._xbox.connected_drive()
+      view = self._xbox.connected_drive()
       now = time.ticks_ms()
-      if connected and drive is not None and now - send_ms >= self._send_interval_ms:
-        self._send_drive(drive)
+      if view.connected and view.drive is not None and now - send_ms >= self._send_interval_ms:
+        self._send_drive(view.drive)
         send_ms = now
-      elif was_connected and not connected:
+      elif was_connected and not view.connected:
         try:
           self._rover.send_stop()
         except Exception as stop_error:
           print(f"teleop: send_stop failed: {stop_error}")
-      was_connected = connected
+      was_connected = view.connected
       # Event.wait releases the GIL; timeout comes from config timing.teleop_poll_sleep_ms.
       self._stop.wait(timeout=self._poll_sleep_ms / 1000.0)

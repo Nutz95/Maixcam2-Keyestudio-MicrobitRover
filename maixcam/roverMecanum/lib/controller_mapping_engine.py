@@ -60,9 +60,8 @@ class ControllerMappingEngine:
 
     dpad = self._dpad_axes(state)
     if dpad is not None:
-      out.axis_strafe, out.axis_forward = dpad
-      out.axis_strafe = self._shape_axis(out.axis_strafe, deadzone, sensitivity, expo, curve)
-      out.axis_forward = self._shape_axis(out.axis_forward, deadzone, sensitivity, expo, curve)
+      out.axis_strafe = self._shape_axis(dpad.strafe, deadzone, sensitivity, expo, curve)
+      out.axis_forward = self._shape_axis(dpad.forward, deadzone, sensitivity, expo, curve)
       preset = self._button_preset(state)
       if preset is not None:
         out.preset_cmd = preset

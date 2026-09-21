@@ -1,7 +1,10 @@
 """Parse bluetoothctl output (scan lines, pair/connect success)."""
 
 import re
+from typing import List, Optional
 
+from lib.bluetooth_device_line import BluetoothDeviceLine
+from lib.scan_match_result import ScanMatchResult
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x01|\x02")
 
@@ -24,7 +27,7 @@ class BluetoothctlRunner:
     re.IGNORECASE,
   )
 
-  def last_flag_yes(self, output, key):
+  def last_flag_yes(self, output, key) -> bool:
     """Return True if the last ``Key: yes/no`` line in bluetoothctl output is yes."""
     needle = key.lower() + ":"
     last = None
@@ -36,7 +39,7 @@ class BluetoothctlRunner:
     return bool(last)
 
   @staticmethod
-  def pair_succeeded(output):
+  def pair_succeeded(output) -> bool:
     """True only if pairing succeeded after the last failure, if any."""
     text = BluetoothctlRunner.strip_ansi(output)
     ok_pos = max(text.rfind("Pairing successful"), text.rfind("Already paired"))
@@ -46,13 +49,13 @@ class BluetoothctlRunner:
     return ok_pos > fail_pos
 
   @staticmethod
-  def bond_ready(output):
+  def bond_ready(output) -> bool:
     """True if the pad is paired and connected (reuse bond, not a fresh pair)."""
     runner = BluetoothctlRunner()
     return runner.last_flag_yes(output, "Paired") and runner.last_flag_yes(output, "Connected")
 
   @staticmethod
-  def xbox_pairing_advertisement(output, mac):
+  def xbox_pairing_advertisement(output, mac) -> bool:
     """
     True when the pad is advertising for pairing.
 
@@ -73,11 +76,12 @@ class BluetoothctlRunner:
     return False
 
   @staticmethod
-  def strip_ansi(text):
+  def strip_ansi(text) -> str:
     """Strip bluetoothctl color/control sequences."""
     return _ANSI_RE.sub("", text or "")
 
-  def build_targets(self, name, aliases):
+  def build_targets(self, name, aliases) -> List[str]:
+    """Lowercased name list used to match scan/devices output."""
     target = (name or "").lower().strip()
     targets = [target] if target else []
     if aliases:
@@ -91,47 +95,48 @@ class BluetoothctlRunner:
         targets.append(alias)
     return targets or ["xbox wireless controller"]
 
-  def match_scan_output(self, output, targets):
-    """Parse bluetoothctl device listings; return (exact_mac, partial_mac, seen)."""
-    exact = None
-    partial = None
+  def match_scan_output(self, output, targets) -> ScanMatchResult:
+    """Parse bluetoothctl device listings into a named match result."""
+    exact = ""
+    partial = ""
     seen = 0
     for line in output.splitlines():
       parsed = self.parse_device_line(line.strip())
       if parsed is None:
         continue
-      mac, device_name = parsed
-      if not device_name or device_name.startswith("("):
+      if not parsed.name or parsed.name.startswith("("):
         continue
-      upper = device_name.upper()
+      upper = parsed.name.upper()
       if upper.startswith(("RSSI:", "TXPOWER:", "UUIDS:", "MANUFACTURERDATA", "SERVICEDATA")):
         continue
       seen += 1
-      print(f"  bt scan: {mac} {device_name}")
-      dn = device_name.lower()
+      print(f"  bt scan: {parsed.mac} {parsed.name}")
+      dn = parsed.name.lower()
       for candidate in targets:
         if dn == candidate:
-          exact = mac
+          exact = parsed.mac
           break
         if candidate in dn or ("xbox" in dn and "controller" in dn):
-          partial = partial or mac
+          partial = partial or parsed.mac
       if exact:
         break
-    return exact, partial, seen
+    return ScanMatchResult(exact_mac=exact, partial_mac=partial, devices_seen=seen)
 
-  def parse_device_line(self, line):
+  def parse_device_line(self, line) -> Optional[BluetoothDeviceLine]:
     """Extract MAC + name from a bluetoothctl device line, or None."""
     if not line:
       return None
     name_match = re.search(r"Name:\s*(.+)$", line, re.IGNORECASE)
     mac_match = self._MAC_RE.search(line)
     if name_match and mac_match:
-      return mac_match.group(1).upper(), name_match.group(1).strip()
+      return BluetoothDeviceLine(
+        mac_match.group(1).upper(), name_match.group(1).strip(),
+      )
     device_match = self._DEVICE_LINE_RE.match(line)
     if device_match:
       mac = device_match.group(1).upper()
       tail = device_match.group(2).strip()
       if tail.lower().startswith("name:"):
         tail = tail.split(":", 1)[-1].strip()
-      return mac, tail
+      return BluetoothDeviceLine(mac, tail)
     return None

@@ -38,7 +38,7 @@ class ConfigStore:
         raw = self._load_template()
         created = True
 
-    raw, merged = self._merge_template(raw)
+    merged = self._merge_template(raw)
     if created or merged:
       self._write_dict(raw)
     elif os.path.isfile(self.path):
@@ -132,22 +132,15 @@ class ConfigStore:
     with open(self._template_path(), "r", encoding="utf-8") as handle:
       return json.load(handle)
 
-  def _merge_template(self, data: dict):
-    """Fill missing template keys on a fresh JSON dict. Returns (data, changed)."""
+  def _merge_template(self, data: dict) -> bool:
+    """Fill missing template keys; apply mapping_revision migration. Returns changed."""
     base = self._load_template()
-    changed = False
-    for key, value in base.items():
-      if key not in data:
-        data[key] = value
-        changed = True
+    changed = self._fill_missing(data, base)
 
     target_revision = base.get("mapping_revision", 0)
     if data.get("mapping_revision", 0) < target_revision:
-      if "mapping" not in data:
-        data["mapping"] = dict(base["mapping"])
-      if "evdev" not in data:
-        data["evdev"] = dict(base["evdev"])
       data["mapping_revision"] = target_revision
+      data["mapping"] = dict(data.get("mapping") or {})
       data["mapping"]["axes"] = dict(base["mapping"]["axes"])
       if "dpad" in base["mapping"]:
         data["mapping"]["dpad"] = dict(base["mapping"]["dpad"])
@@ -160,40 +153,20 @@ class ConfigStore:
         f" {target_revision} (forward=left_y strafe=triggers spin=right_x pivot=left_x)"
       )
 
-    for section_name in ("rover", "mapping", "evdev", "camera", "timing"):
-      if section_name not in base:
-        continue
-      if section_name not in data:
-        data[section_name] = dict(base[section_name])
-        changed = True
-        continue
-      for key, value in base[section_name].items():
-        if key not in data[section_name]:
-          data[section_name][key] = value
-          changed = True
-    if "axes" in data.get("mapping", {}):
-      for key, value in base["mapping"]["axes"].items():
-        if key not in data["mapping"]["axes"]:
-          data["mapping"]["axes"][key] = value
-          changed = True
-    if "invert" in data.get("mapping", {}):
-      for key, value in base["mapping"]["invert"].items():
-        if key not in data["mapping"]["invert"]:
-          data["mapping"]["invert"][key] = value
-          changed = True
-    if "buttons" in data.get("mapping", {}):
-      for key, value in base["mapping"]["buttons"].items():
-        if key not in data["mapping"]["buttons"]:
-          data["mapping"]["buttons"][key] = value
-          changed = True
-    if "dpad" in base.get("mapping", {}):
-      if "dpad" not in data.get("mapping", {}):
-        data["mapping"]["dpad"] = dict(base["mapping"]["dpad"])
-        changed = True
-      else:
-        for key, value in base["mapping"]["dpad"].items():
-          if key not in data["mapping"]["dpad"]:
-            data["mapping"]["dpad"][key] = value
-            changed = True
+    return changed
 
-    return data, changed
+  @staticmethod
+  def _fill_missing(destination: dict, template: dict) -> bool:
+    """Recursively copy template keys that are absent from destination."""
+    changed = False
+    for key, value in template.items():
+      if key not in destination:
+        if isinstance(value, dict):
+          destination[key] = dict(value)
+        else:
+          destination[key] = value
+        changed = True
+      elif isinstance(value, dict) and isinstance(destination[key], dict):
+        if ConfigStore._fill_missing(destination[key], value):
+          changed = True
+    return changed

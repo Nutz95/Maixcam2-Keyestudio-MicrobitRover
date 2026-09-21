@@ -235,8 +235,8 @@ class BluetoothctlSession:
     poll_s = self._timing.sleep_s(self._timing.bt_scan_poll_ms)
     while time.time() < deadline:
       chunk = self._since(mark)
-      exact, partial, _seen = runner.match_scan_output(chunk, targets)
-      mac = exact or partial or ""
+      match = runner.match_scan_output(chunk, targets)
+      mac = match.mac
       if mac:
         break
       # Re-query the cache: discovery alone often skips previously paired Xbox.
@@ -249,7 +249,7 @@ class BluetoothctlSession:
     self._scan_off()
     return mac
 
-  def _mac_from_devices(self, runner, targets):
+  def _mac_from_devices(self, runner, targets) -> str:
     """Parse ``devices`` output for an Xbox name match."""
     mark = self._mark()
     self.send("devices")
@@ -258,8 +258,7 @@ class BluetoothctlSession:
       ("Device ",),
       self._timing.sleep_s(self._timing.bt_devices_query_ms),
     )
-    exact, partial, _seen = runner.match_scan_output(chunk, targets)
-    return exact or partial or ""
+    return runner.match_scan_output(chunk, targets).mac
 
   def _read_loop(self):
     while self._alive and self._master is not None:

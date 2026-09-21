@@ -21,11 +21,11 @@ Discovery started
 class TestBluetoothScanParse(unittest.TestCase):
   def test_parse_new_device_line_with_name(self):
     runner = BluetoothctlRunner()
-    mac, name = runner.parse_device_line(
+    device = runner.parse_device_line(
       "[NEW] Device 78:86:2E:AC:8D:03 Xbox Wireless Controller"
     )
-    self.assertEqual(mac, "78:86:2E:AC:8D:03")
-    self.assertEqual(name, "Xbox Wireless Controller")
+    self.assertEqual(device.mac, "78:86:2E:AC:8D:03")
+    self.assertEqual(device.name, "Xbox Wireless Controller")
 
   def test_last_connected_flag_ignores_transient_yes(self):
     runner = BluetoothctlRunner()
@@ -57,23 +57,19 @@ Pairing successful
 
   def test_match_scan_output(self):
     runner = BluetoothctlRunner()
-    exact, partial, seen = runner.match_scan_output(
-      SAMPLE, ["xbox wireless controller"]
-    )
-    self.assertEqual(exact, "78:86:2E:AC:8D:03")
-    self.assertGreaterEqual(seen, 2)
-    self.assertTrue(partial is None or partial == exact)
+    match = runner.match_scan_output(SAMPLE, ["xbox wireless controller"])
+    self.assertEqual(match.exact_mac, "78:86:2E:AC:8D:03")
+    self.assertGreaterEqual(match.devices_seen, 2)
+    self.assertTrue(not match.partial_mac or match.partial_mac == match.exact_mac)
 
   def test_match_devices_list_line(self):
     """Known pads appear as ``Device MAC Name`` without [NEW]."""
     runner = BluetoothctlRunner()
     listing = "Device 78:86:2E:97:BD:9C Xbox Wireless Controller\n"
-    exact, partial, seen = runner.match_scan_output(
-      listing, ["xbox wireless controller"]
-    )
-    self.assertEqual(exact, "78:86:2E:97:BD:9C")
-    self.assertEqual(seen, 1)
-    self.assertIsNone(partial)
+    match = runner.match_scan_output(listing, ["xbox wireless controller"])
+    self.assertEqual(match.exact_mac, "78:86:2E:97:BD:9C")
+    self.assertEqual(match.devices_seen, 1)
+    self.assertEqual(match.partial_mac, "")
 
   def test_pairing_adv_requires_manufacturer_or_new_xbox(self):
     mac = "78:86:2E:AC:8D:03"

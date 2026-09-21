@@ -1,5 +1,7 @@
 """UART binary protocol — Maix-free (MaixCam app + PC tools)."""
 
+from lib.dpad_axes import DpadAxes
+
 PROTO_SYNC = 0xAA
 PROTO_ACK = 0x55
 DEFAULT_SPEED = 100
@@ -99,8 +101,8 @@ def build_joystick_frame(axis_strafe, axis_forward, speed, axis_spin=0, axis_piv
 
 
 def dpad_axes_for_action(action):
-  """Return (strafe, forward) for a d-pad action name, or None."""
+  """Return DpadAxes for a d-pad action name, or None."""
   spec = DRIVE_ACTIONS.get(action)
   if spec is None:
     return None
-  return spec["strafe"], spec["forward"]
+  return DpadAxes(spec["strafe"], spec["forward"])

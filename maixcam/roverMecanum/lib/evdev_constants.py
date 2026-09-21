@@ -5,6 +5,8 @@ These match <linux/input-event-codes.h>. We use them when parsing
 /dev/input/event* binary records from BlueZ HID devices.
 """
 
+from lib.abs_range import AbsRange
+
 # --- Event types -----------------------------------------------------------
 
 EV_SYN = 0x00   # Synchronization event (end of a report)
@@ -39,11 +41,11 @@ XBOX_VENDOR_ID = "045e"
 _ALWAYS_TRIGGER_CODES = frozenset({ABS_GAS, ABS_BRAKE})
 
 
-def default_abs_range(axis_code, prefer_trigger=False):
-  """Fallback min/max/flat when the kernel absinfo is missing."""
+def default_abs_range(axis_code, prefer_trigger=False) -> AbsRange:
+  """Fallback AbsRange when the kernel absinfo is missing."""
   if prefer_trigger or axis_code in _ALWAYS_TRIGGER_CODES:
-    return 0, 1023, 64
-  return 0, 65535, 4096
+    return AbsRange(0, 1023, 64)
+  return AbsRange(0, 65535, 4096)
 
 # --- Button codes (BTN_*) --------------------------------------------------
 

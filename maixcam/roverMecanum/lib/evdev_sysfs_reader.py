@@ -1,5 +1,6 @@
 import os
 
+from lib.abs_range import AbsRange
 from lib.evdev_constants import ABS_BRAKE, ABS_GAS, ABS_RX, ABS_RY, ABS_RZ, ABS_X, ABS_Y, ABS_Z
 
 # Linux input subsystem ABS_* names for sysfs paths.
@@ -47,14 +48,16 @@ class EvdevSysfsReader:
     return self.read_field(event_path, "id/vendor")
 
   def read_absinfo_real(self, event_path, axis_code):
+    """Return AbsRange for one axis from sysfs, or None."""
     for root in self._device_roots(event_path):
       for rel in (f"absinfo/{axis_code}", f"absinfo/{axis_code:02x}"):
         path = f"{root}/{rel}"
         try:
-          min_v = int(self._read_text(f"{path}/min"))
-          max_v = int(self._read_text(f"{path}/max"))
-          flat = int(self._read_text(f"{path}/flat"))
-          return min_v, max_v, flat
+          return AbsRange(
+            int(self._read_text(f"{path}/min")),
+            int(self._read_text(f"{path}/max")),
+            int(self._read_text(f"{path}/flat")),
+          )
         except (OSError, ValueError) as error:
           self._report_probe_error("read absinfo", path, error)
           continue

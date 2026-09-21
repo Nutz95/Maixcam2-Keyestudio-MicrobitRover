@@ -24,7 +24,7 @@ class BluetoothPairingService:
     """Stop the bluetoothctl agent (app exit only)."""
     self._session.close()
 
-  def connect_saved(self):
+  def connect_saved(self) -> BluetoothCommandResult:
     """Reconnect to the MAC already stored in config."""
     mac = self._saved_mac()
     if not mac:
@@ -41,7 +41,7 @@ class BluetoothPairingService:
       )
     return BluetoothCommandResult(output=output, error="CONNECT failed — try PAIR")
 
-  def scan_for_controller(self):
+  def scan_for_controller(self) -> ControllerScanResult:
     """Use saved MAC, or scan until the Xbox name appears."""
     saved = self._saved_mac()
     if saved:
@@ -65,7 +65,7 @@ class BluetoothPairingService:
     print(f"pairing: MAC saved {mac}")
     return ControllerScanResult(mac=mac)
 
-  def pair_mac(self, mac):
+  def pair_mac(self, mac) -> BluetoothCommandResult:
     """Encrypted pair with the live agent; Xbox should then stay / reconnect."""
     output = self._session.pair(mac)
     if BluetoothctlRunner.pair_succeeded(output) or BluetoothctlRunner.bond_ready(output):
@@ -81,5 +81,5 @@ class BluetoothPairingService:
       error="Pairing failed — hold SYNC, forget pad on PC, retry PAIR",
     )
 
-  def _saved_mac(self):
+  def _saved_mac(self) -> str:
     return self._config_store.settings().controller_mac.strip().upper()
