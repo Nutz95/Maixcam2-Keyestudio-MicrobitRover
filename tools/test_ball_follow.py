@@ -55,6 +55,8 @@ class TestBallFollow(unittest.TestCase):
     self.assertNotEqual(command.spin, 0)
     self.assertEqual(command.forward, 0)
     self.assertEqual(command.reason, "align")
+    # Breakaway floor: small visual error still clears motor static friction.
+    self.assertGreaterEqual(abs(command.spin), self.settings.min_spin_axis)
 
   def test_small_high_ball_approaches(self):
     policy = BallFollowPolicy(self.settings)
@@ -65,6 +67,7 @@ class TestBallFollow(unittest.TestCase):
     self.assertLess(command.forward, 0)
     self.assertEqual(command.spin, 0)
     self.assertEqual(command.reason, "approach")
+    self.assertGreaterEqual(abs(command.forward), self.settings.min_forward_axis)
 
   def test_large_low_ball_reverses(self):
     policy = BallFollowPolicy(self.settings)
@@ -74,6 +77,7 @@ class TestBallFollow(unittest.TestCase):
 
     self.assertGreater(command.forward, 0)
     self.assertEqual(command.reason, "too_close")
+    self.assertLessEqual(abs(command.forward), self.settings.max_retreat_axis)
 
   def test_lost_ball_searches_after_timeout(self):
     policy = BallFollowPolicy(self.settings)
@@ -165,21 +169,21 @@ class TestBallFollow(unittest.TestCase):
 
   def test_align_spin_is_damped_when_ball_returns_to_center(self):
     policy = BallFollowPolicy(self.settings)
-    # Ball on the right, then sliding left toward center → reduce spin.
-    first = BallObservation(560, 250, 80, 80, 5000, 5000.0, 1000, 640, 480)
-    returning = BallObservation(500, 250, 80, 80, 5000, 5000.0, 1050, 640, 480)
+    # Far-right ball sliding left: PD output stays above the breakaway floor.
+    first = BallObservation(630, 250, 80, 80, 5000, 5000.0, 1000, 640, 480)
+    returning = BallObservation(580, 250, 80, 80, 5000, 5000.0, 1050, 640, 480)
     policy.decide(first, 1000)
     static = BallFollowPolicy(self.settings)
     static_cmd = static.decide(
-      BallObservation(500, 250, 80, 80, 5000, 5000.0, 1000, 640, 480),
+      BallObservation(580, 250, 80, 80, 5000, 5000.0, 1000, 640, 480),
       1000,
     )
     damped_cmd = policy.decide(returning, 1050)
 
     self.assertEqual(static_cmd.reason, "align")
     self.assertEqual(damped_cmd.reason, "align")
-    self.assertGreater(static_cmd.spin, 0)
-    self.assertLess(damped_cmd.spin, static_cmd.spin)
+    self.assertGreaterEqual(static_cmd.spin, self.settings.min_spin_axis)
+    self.assertLessEqual(damped_cmd.spin, static_cmd.spin)
 
   def test_controller_cycles_green_and_red(self):
     controller = BallFollowController(self.settings)

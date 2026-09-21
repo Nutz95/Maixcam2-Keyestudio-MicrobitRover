@@ -31,8 +31,11 @@ class BallFollowSettings:
     "spin_gain",
     "spin_damping",
     "forward_gain",
+    "min_spin_axis",
     "max_spin_axis",
+    "min_forward_axis",
     "max_forward_axis",
+    "max_retreat_axis",
     "search_spin_axis",
     "search_turn_ms",
     "search_pause_ms",
@@ -76,26 +79,35 @@ class BallFollowSettings:
     self.velocity_timeout_ms = max(
       100, as_int(follow, "velocity_timeout_ms", 1000),
     )
-    self.spin_gain = max(1.0, as_float(follow, "spin_gain", 7000.0))
-    self.spin_damping = max(0.0, as_float(follow, "spin_damping", 1200.0))
-    self.forward_gain = max(1.0, as_float(follow, "forward_gain", 32000.0))
-    # Align spin stays gentle; chase uses a higher forward ceiling.
-    self.max_spin_axis = max(1, min(32767, as_int(follow, "max_spin_axis", 4000)))
+    self.spin_gain = max(1.0, as_float(follow, "spin_gain", 16000.0))
+    self.spin_damping = max(0.0, as_float(follow, "spin_damping", 2200.0))
+    self.forward_gain = max(1.0, as_float(follow, "forward_gain", 36000.0))
+    # Vision uses linear+floor shaping (not joystick expo). Floor clears motor breakaway.
+    self.max_spin_axis = max(1, min(32767, as_int(follow, "max_spin_axis", 9000)))
+    self.min_spin_axis = max(
+      1, min(self.max_spin_axis, as_int(follow, "min_spin_axis", 6500)),
+    )
     self.max_forward_axis = max(
-      1, min(32767, as_int(follow, "max_forward_axis", 12000)),
+      1, min(32767, as_int(follow, "max_forward_axis", 15000)),
     )
-    # Search must clear motor breakaway, but stay below "two turns in one window".
+    self.min_forward_axis = max(
+      1, min(self.max_forward_axis, as_int(follow, "min_forward_axis", 7000)),
+    )
+    self.max_retreat_axis = max(
+      1, min(self.max_forward_axis, as_int(follow, "max_retreat_axis", 6500)),
+    )
+    # Search spin clears breakaway; turn duration is timed (no gyro yet).
     self.search_spin_axis = max(
-      1, min(32767, as_int(follow, "search_spin_axis", 6500)),
+      1, min(32767, as_int(follow, "search_spin_axis", 8000)),
     )
-    self.search_turn_ms = max(1000, as_int(follow, "search_turn_ms", 4500))
+    self.search_turn_ms = max(500, as_int(follow, "search_turn_ms", 2200))
     self.search_pause_ms = max(0, as_int(follow, "search_pause_ms", 800))
     self.search_retreat_ms = max(200, as_int(follow, "search_retreat_ms", 700))
     self.search_retreat_axis = max(
-      1, min(self.max_forward_axis, as_int(follow, "search_retreat_axis", 4500)),
+      1, min(self.max_retreat_axis, as_int(follow, "search_retreat_axis", 4500)),
     )
     self.horizontal_deadzone = self._ratio(
-      follow, "horizontal_deadzone", 0.12,
+      follow, "horizontal_deadzone", 0.14,
     )
     self.lost_search_ms = max(500, as_int(follow, "lost_search_ms", 2000))
     # Prediction amplifies oscillation while the robot itself is spinning; default off.

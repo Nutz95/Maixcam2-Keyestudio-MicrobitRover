@@ -26,8 +26,22 @@ The first controller is intentionally sequential:
 3. Retreat when the ball is too large or too low in the image.
 4. Stop inside the target distance band.
 5. Stop for two seconds when the target is lost.
-6. Search with one slow full turn toward the last exit side/trajectory.
-7. If still lost, reverse briefly (ball may be under the camera), then turn again.
+6. Search with one timed turn toward the last exit side/trajectory.
+7. Pause, reverse briefly (ball may be under the camera), pause, then turn again.
+
+Without a yaw/gyro measurement, "one turn" is timed (`search_turn_ms`) and must be
+calibrated on the robot. A gyro-closed turn is a later upgrade.
+
+Closed-loop control is intentional: every teleop tick runs detect → decide →
+UART. Oscillation is a gain/delay problem, not a reason to freeze motors while
+vision runs. Prediction defaults to `0` ms because predicting while the rover
+itself is spinning often adds lag and overshoot.
+
+Motor shaping differs from teleop: Xbox sticks use `rover.axis_curve` (usually
+`expo`, soft center). Ball-follow uses a **linear** visual error with a
+**breakaway floor** (`min_spin_axis` / `min_forward_axis`) so small corrections
+still clear static friction, and a lower `max_retreat_axis` so too-close reverse
+is less brutal than approach.
 
 The command contains only `forward` and `spin`; strafe and pivot remain zero.
 This avoids asking the mecanum mixer to solve several uncertain errors at once.

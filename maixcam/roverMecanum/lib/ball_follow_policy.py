@@ -70,7 +70,11 @@ class BallFollowPolicy:
         horizontal_error * self._settings.spin_gain
         + self._velocity_x * self._settings.spin_damping
       )
-      spin = self._bounded(damped, self._settings.max_spin_axis)
+      spin = self._drive_axis(
+        damped,
+        self._settings.min_spin_axis,
+        self._settings.max_spin_axis,
+      )
       return BallFollowCommand(
         spin=self._settings.spin_axis_sign * spin,
         reason="align",
@@ -84,9 +88,10 @@ class BallFollowPolicy:
         self._settings.min_distance_error,
         predicted_height - self._settings.target_height_ratio,
       )
-      backward = self._bounded(
+      backward = self._drive_axis(
         distance_error * self._settings.forward_gain,
-        self._settings.max_forward_axis,
+        min(self._settings.min_forward_axis, self._settings.max_retreat_axis),
+        self._settings.max_retreat_axis,
       )
       return BallFollowCommand(
         forward=-self._settings.forward_axis_sign * backward,
@@ -104,8 +109,9 @@ class BallFollowPolicy:
         self._settings.min_distance_error,
         self._settings.target_height_ratio - predicted_height,
       )
-      forward = self._bounded(
+      forward = self._drive_axis(
         distance_error * self._settings.forward_gain,
+        self._settings.min_forward_axis,
         self._settings.max_forward_axis,
       )
       return BallFollowCommand(
@@ -190,5 +196,18 @@ class BallFollowPolicy:
     return self._settings.spin_axis_sign * direction
 
   @staticmethod
-  def _bounded(value: float, limit: int) -> int:
-    return max(-limit, min(limit, int(value)))
+  def _drive_axis(value: float, min_axis: int, max_axis: int) -> int:
+    """
+    Linear vision→motor map with a breakaway floor.
+
+    Joystick teleop uses expo (soft center). Ball-follow must not: small visual
+    errors still need enough PWM to leave static friction. Zero stays zero;
+    any non-zero command is raised to ``min_axis`` then capped at ``max_axis``.
+    """
+    if value == 0:
+      return 0
+    sign = 1 if value > 0 else -1
+    magnitude = min(max_axis, abs(int(value)))
+    if magnitude > 0:
+      magnitude = max(min_axis, magnitude)
+    return sign * magnitude
