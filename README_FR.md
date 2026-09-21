@@ -1,26 +1,26 @@
-# Maixcam2 - Keyestudio Microbit 4WD Mecanum Rover
+# Maixcam 2 + micro:bit : Keyestudio Microbit 4WD Mecanum Rover
 
 > 🇬🇧 English (default on GitHub) : [README.md](README.md)
 
-<p align="center">
-  <a href="resources/MaixCam2_Mecanum_Rover.jpg">
-    <img src="resources/MaixCam2_Mecanum_Rover.jpg" width="520" alt="MaixCam2 sur rover mécanum Keyestudio avec micro:bit">
-  </a>
-</p>
+![MaixCam2 sur rover mécanum Keyestudio avec micro:bit](resources/MaixCam2_Mecanum_Rover.jpg)
 
-<p align="center"><em>Cliquez sur l'image pour l'ouvrir en pleine résolution.</em></p>
+*Cliquez sur l'image pour l'ouvrir en pleine résolution.*
 
 Firmware PlatformIO (C++) pour piloter le **Keyestudio 4WD Mecanum Robot Car V2** (BBC micro:bit V2) via une liaison série binaire depuis un **MaixCam** (ou tout autre hôte UART).
 
 ### Index documentation
 
-| Document | Langue | Sujet |
-|----------|--------|-------|
-| [README.md](README.md) | English | Vue d'ensemble |
-| [README_FR.md](README_FR.md) | Français | Guide complet (ce fichier) |
+
+| Document                                                               | Langue   | Sujet                          |
+| ---------------------------------------------------------------------- | -------- | ------------------------------ |
+| [README.md](README.md)                                                 | English  | Vue d'ensemble                 |
+| [README_FR.md](README_FR.md)                                           | Français | Guide complet (ce fichier)     |
 | [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) | Français | App Xbox, mapping, déploiement |
-| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md) | Français | Bluetooth BlueZ sur MaixCam2 |
-| [microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md) | Français | Protocole UART binaire |
+| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md)             | Français | Bluetooth BlueZ sur MaixCam2   |
+| [microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md)                     | Français | Protocole UART binaire         |
+
+
+
 
 ## Architecture
 
@@ -39,14 +39,20 @@ MaixCam (UART TX/RX)  <--115200-->  micro:bit V2 (P1=TX, P2=RX)
 - Les moteurs sont pilotés via I2C (`0x30`) comme dans l'exemple Python `keyes_mecanum_Car_V2.py`
 - Canaux PWM I2C 1-8 → drivers HR8833 (2 ponts par moteur)
 
+
+
 ### Mapping moteurs (I2C `0x30`)
 
-| Moteur | Canaux PWM | Description |
-|--------|------------|-------------|
-| Upper Right | 1, 2 | Avant droite |
-| Upper Left | 3, 4 | Avant gauche |
-| Lower Right | 5, 6 | Arrière droite |
-| Lower Left | 7, 8 | Arrière gauche |
+
+| Moteur      | Canaux PWM | Description    |
+| ----------- | ---------- | -------------- |
+| Upper Right | 1, 2       | Avant droite   |
+| Upper Left  | 3, 4       | Avant gauche   |
+| Lower Right | 5, 6       | Arrière droite |
+| Lower Left  | 7, 8       | Arrière gauche |
+
+
+
 
 ## Projet PlatformIO
 
@@ -61,13 +67,15 @@ pio run -t upload
 - Framework : Arduino (nRF52)
 - Upload : **mbed** (copie du `.hex` sur le lecteur `MICROBIT`)
 
+
+
 ### Flasher le micro:bit (Windows)
 
 **Important :** la programmation se fait via le **port USB du micro:bit** (en haut de la carte),
 pas via la liaison serie P1/P2 vers le MaixCam.
 
 1. Brancher un cable USB **donnees** (pas charge seule) sur le micro:bit
-2. Verifier dans l'Explorateur Windows qu'un lecteur **`MICROBIT`** apparait
+2. Verifier dans l'Explorateur Windows qu'un lecteur `MICROBIT` apparait
 3. Lancer `pio run -t upload` depuis le dossier `microbit/`
 4. Le firmware est copie automatiquement ; la carte redemarre
 
@@ -81,12 +89,14 @@ pio run -t upload --upload-port D:
 
 #### Que voir dans le Gestionnaire de peripheriques ?
 
-| Element | Normal ? | Role |
-|---------|----------|------|
-| Lecteur `MICROBIT` dans l'Explorateur | **Oui, indispensable** | Flash du firmware (methode mbed) |
-| `DAPLink CMSIS-DAP` / `mbed` sous USB | Souvent oui | Debug / flash alternatif |
-| 1 ou 2 ports COM (`mbed Serial Port`) | Souvent oui | Console USB (pas utilise par ce projet) |
-| Rien du tout | **Non** | Cable, port USB ou carte non alimentee |
+
+| Element                               | Normal ?               | Role                                    |
+| ------------------------------------- | ---------------------- | --------------------------------------- |
+| Lecteur `MICROBIT` dans l'Explorateur | **Oui, indispensable** | Flash du firmware (methode mbed)        |
+| `DAPLink CMSIS-DAP` / `mbed` sous USB | Souvent oui            | Debug / flash alternatif                |
+| 1 ou 2 ports COM (`mbed Serial Port`) | Souvent oui            | Console USB (pas utilise par ce projet) |
+| Rien du tout                          | **Non**                | Cable, port USB ou carte non alimentee  |
+
 
 **Pas besoin d'installer un driver** sur Windows 10/11 dans la plupart des cas.
 Si rien n'apparait : essayer un autre cable USB, un autre port, ou appuyer sur le bouton **RESET** du micro:bit.
@@ -103,6 +113,8 @@ Si le DAPLink est bien detecte :
 pio run -e nrf52_dk_cmsis -t upload
 ```
 
+
+
 #### Flash manuel (sans PlatformIO)
 
 ```bash
@@ -115,29 +127,40 @@ Oui, avec PlatformIO on code en **C++** (pas en MicroPython/MakeCode).
 
 ## Liaison série
 
-| Paramètre | Valeur |
-|-----------|--------|
-| Broches | **P1 = TX**, **P2 = RX** (connecteur edge) |
-| USB | Port COM **mbed** (console USB du micro:bit) |
-| Baudrate | **115200** |
-| Format | 8N1 |
+
+| Paramètre | Valeur                                       |
+| --------- | -------------------------------------------- |
+| Broches   | **P1 = TX**, **P2 = RX** (connecteur edge)   |
+| USB       | Port COM **mbed** (console USB du micro:bit) |
+| Baudrate  | **115200**                                   |
+| Format    | 8N1                                          |
+
 
 Le firmware accepte le **même protocole binaire** sur les deux interfaces :
+
 - **P1/P2** : liaison vers le MaixCam monte sur le robot
 - **USB COM** : test depuis un PC via le port **mbed Serial** (pas le port DAPLink)
 
 Le micro:bit expose souvent **2 ports COM** sous Windows :
-| Port | Usage |
-|------|-------|
-| **mbed Serial Port (COMx)** | Protocole rover + logs debug |
+
+
+| Port                         | Usage                                                           |
+| ---------------------------- | --------------------------------------------------------------- |
+| **mbed Serial Port (COMx)**  | Protocole rover + logs debug                                    |
 | **DAPLink CMSIS-DAP (COMy)** | Debug/upload uniquement — **ne pas utiliser** pour le protocole |
 
+
 Au démarrage, le firmware :
+
 1. Initialise les moteurs (tout à 0)
 2. Écoute les trames binaires sur P1/P2 **et** sur le port COM USB mbed
 3. Écrit les logs debug sur le port USB mbed (`[rover] ready ...`)
 
+
+
 ## Protocole binaire
+
+
 
 ### Trame prédéfinie (4 octets)
 
@@ -150,22 +173,24 @@ Mouvements courants en une seule commande :
 - `SPEED` : 0-255 (vitesse PWM moteur)
 - `CHECKSUM` = `(0xAA + CMD + SPEED) & 0xFF`
 
-| CMD | Nom | Mouvement |
-|-----|-----|-----------|
-| `0x00` | STOP | Arrêt immédiat |
-| `0x01` | FORWARD | Tout en avant |
-| `0x02` | BACKWARD | Tout en arrière |
-| `0x03` | STRAFE_LEFT | Déplacement latéral gauche |
-| `0x04` | STRAFE_RIGHT | Déplacement latéral droit |
-| `0x05` | DIAG_FL | Diagonale avant-gauche |
-| `0x06` | DIAG_FR | Diagonale avant-droite |
-| `0x07` | DIAG_BL | Diagonale arrière-gauche |
-| `0x08` | DIAG_BR | Diagonale arrière-droite |
-| `0x09` | SPIN_LEFT | Rotation sur place (sens anti-horaire) |
-| `0x0A` | SPIN_RIGHT | Rotation sur place (sens horaire) |
-| `0x0B` | PIVOT_RIGHT | Pivot autour du côté droit |
-| `0x0C` | PIVOT_REAR | Pivot autour de l'axe arrière |
-| `0x30` | JOYSTICK | Axes analogiques strafe / forward / spin / pivot |
+
+| CMD    | Nom          | Mouvement                                        |
+| ------ | ------------ | ------------------------------------------------ |
+| `0x00` | STOP         | Arrêt immédiat                                   |
+| `0x01` | FORWARD      | Tout en avant                                    |
+| `0x02` | BACKWARD     | Tout en arrière                                  |
+| `0x03` | STRAFE_LEFT  | Déplacement latéral gauche                       |
+| `0x04` | STRAFE_RIGHT | Déplacement latéral droit                        |
+| `0x05` | DIAG_FL      | Diagonale avant-gauche                           |
+| `0x06` | DIAG_FR      | Diagonale avant-droite                           |
+| `0x07` | DIAG_BL      | Diagonale arrière-gauche                         |
+| `0x08` | DIAG_BR      | Diagonale arrière-droite                         |
+| `0x09` | SPIN_LEFT    | Rotation sur place (sens anti-horaire)           |
+| `0x0A` | SPIN_RIGHT   | Rotation sur place (sens horaire)                |
+| `0x0B` | PIVOT_RIGHT  | Pivot autour du côté droit                       |
+| `0x0C` | PIVOT_REAR   | Pivot autour de l'axe arrière                    |
+| `0x30` | JOYSTICK     | Axes analogiques strafe / forward / spin / pivot |
+
 
 Documentation détaillée : **[microbit/PROTOCOL.md](microbit/PROTOCOL.md)** (index FR/EN)
 
@@ -180,19 +205,25 @@ Tout mouvement mécanum possible en une seule trame :
 - `CHECKSUM` = `(0xAA + 0x20 + WHEEL_DIRS + SPEED) & 0xFF`
 - `WHEEL_DIRS` : 2 bits par roue (UL, UR, LL, LR)
 
-| Bits | Roue |
-|------|------|
-| 0-1 | Upper Left |
-| 2-3 | Upper Right |
-| 4-5 | Lower Left |
-| 6-7 | Lower Right |
 
-| Valeur | Direction |
-|--------|-----------|
-| `00` | Stop |
-| `01` | Avant |
-| `10` | Arrière |
-| `11` | Réservé (traité comme stop) |
+| Bits | Roue        |
+| ---- | ----------- |
+| 0-1  | Upper Left  |
+| 2-3  | Upper Right |
+| 4-5  | Lower Left  |
+| 6-7  | Lower Right |
+
+
+
+| Valeur | Direction                   |
+| ------ | --------------------------- |
+| `00`   | Stop                        |
+| `01`   | Avant                       |
+| `10`   | Arrière                     |
+| `11`   | Réservé (traité comme stop) |
+
+
+
 
 ### Trame joystick analogique (12 octets)
 
@@ -200,13 +231,15 @@ Voir **[microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md)** pour le détail comp
 
 ### Exemples
 
-| Action | Trame hex (speed=100) |
-|--------|----------------------|
-| Avancer | `AA 01 64 0F` |
-| Arrêter | `AA 00 00 AA` |
-| Strafe droite | `AA 04 64 12` |
-| Rotation horaire | `AA 0A 64 18` |
-| RAW: avant (4 roues) | `AA 20 55 64 83` |
+
+| Action               | Trame hex (speed=100) |
+| -------------------- | --------------------- |
+| Avancer              | `AA 01 64 0F`         |
+| Arrêter              | `AA 00 00 AA`         |
+| Strafe droite        | `AA 04 64 12`         |
+| Rotation horaire     | `AA 0A 64 18`         |
+| RAW: avant (4 roues) | `AA 20 55 64 83`      |
+
 
 (`0x55` = `01010101` → les 4 roues en avant)
 
@@ -217,6 +250,8 @@ Après une commande valide, le micro:bit renvoie 2 octets :
 ```
 [0x55] [CMD]
 ```
+
+
 
 ## Structure du code
 
@@ -231,6 +266,8 @@ microbit/src/
   ProtocolParser.h            # Parser binaire
   SerialRover.h/cpp           # UART P1/P2 (UARTE1)
 ```
+
+
 
 ## Test depuis le PC (menu interactif)
 
@@ -300,6 +337,8 @@ cd microbit
 pio run -t upload
 ```
 
+
+
 ## Pilotage Xbox / Bluetooth
 
 Le micro:bit V2 n'est pas une bonne cible pour gérer directement une manette Xbox BLE :
@@ -314,7 +353,7 @@ Manette Xbox BLE -> MaixCam2 (Linux evdev + BlueZ) -> UART protocole rover -> mi
 
 Le micro:bit reste concentré sur son rôle stable : parser le protocole série et piloter les moteurs.
 
-Application complète : **`maixcam/roverMecanum/`** — voir [README_FR.md](maixcam/roverMecanum/README_FR.md).
+Application complète : `maixcam/roverMecanum/` — voir [README_FR.md](maixcam/roverMecanum/README_FR.md).
 
 ## Pilotage depuis MaixCam (Python)
 
@@ -339,23 +378,24 @@ with serial.Serial(PORT, BAUD, timeout=1) as ser:
     send_stop(ser)
 ```
 
+
+
 ## Photos
 
 Cliquez sur une vignette pour agrandir l'image.
 
-<p align="center">
-  <a href="resources/MaixCam2_Mecanum_Rover2.jpg"><img src="resources/MaixCam2_Mecanum_Rover2.jpg" width="240" alt="Vue du dessus — boot MaixPy"></a>
-  &nbsp;
-  <a href="resources/MaixCam2_Mecanum_Rover3.jpg"><img src="resources/MaixCam2_Mecanum_Rover3.jpg" width="240" alt="Écran d'appairage Bluetooth"></a>
-  &nbsp;
-  <a href="resources/MaixCam2_Mecanum_Rover4.jpg"><img src="resources/MaixCam2_Mecanum_Rover4.jpg" width="240" alt="Pilotage FPV avec HUD Xbox"></a>
-</p>
+![Vue du dessus — boot MaixPy](resources/MaixCam2_Mecanum_Rover2.jpg)   ![Écran d'appairage Bluetooth](resources/MaixCam2_Mecanum_Rover3.jpg)   ![Pilotage FPV avec HUD Xbox](resources/MaixCam2_Mecanum_Rover4.jpg)
 
-| | | |
-|:---:|:---:|:---:|
+
+|                                                   |                                               |                                                     |
+| ------------------------------------------------- | --------------------------------------------- | --------------------------------------------------- |
 | **Vue du dessus** — démarrage MaixPy sur MaixCam2 | **Appairage** — connexion manette Xbox en BLE | **Pilotage** — vidéo live + jauges sticks + vitesse |
+
+
+
 
 ## Références
 
 - Exemples Python Keyestudio dans `examples/`
 - `examples/LiaisonSerie.txt` : commandes texte d'origine (remplacées ici par le protocole binaire)
+

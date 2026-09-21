@@ -1,14 +1,10 @@
-# MaixCam2 × micro:bit — Keyestudio Mecanum Rover
+# MaixCam 2 + micro:bit : Keyestudio Mecanum Rover
 
 > 🇫🇷 Version française (documentation complète) : [README_FR.md](README_FR.md)
 
-<p align="center">
-  <a href="resources/MaixCam2_Mecanum_Rover.jpg">
-    <img src="resources/MaixCam2_Mecanum_Rover.jpg" width="520" alt="MaixCam2 mounted on Keyestudio mecanum rover with micro:bit">
-  </a>
-</p>
+![MaixCam2 mounted on Keyestudio mecanum rover with micro:bit](resources/MaixCam2_Mecanum_Rover.jpg)
 
-<p align="center"><em>Click the image to open full size.</em></p>
+*Click the image to open full size.*
 
 Drive a **Keyestudio 4WD Mecanum Robot Car V2** with a **MaixCam2** brain and an **Xbox controller** — while the **BBC micro:bit V2** stays focused on what it does best: real-time motor control over I2C.
 
@@ -36,34 +32,46 @@ Split the problem the right way: **MaixCam handles vision + human input**, **mic
 
 ---
 
+
+
 ## What's in the repo?
 
-| Path | What it is |
-|------|------------|
-| [`microbit/`](microbit/) | Firmware — protocol parser, mecanum mixer, motor driver |
-| [`maixcam/roverMecanum/`](maixcam/roverMecanum/) | MaixVision / packaged app — Xbox → UART pipeline |
-| [`tools/`](tools/) | PowerShell + Python scripts to test from a PC |
-| [`microbit/PROTOCOL.md`](microbit/PROTOCOL.md) | Protocol index → [EN](microbit/PROTOCOL_EN.md) / [FR](microbit/PROTOCOL_FR.md) |
+
+| Path                                             | What it is                                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `[microbit/](microbit/)`                         | Firmware — protocol parser, mecanum mixer, motor driver                        |
+| `[maixcam/roverMecanum/](maixcam/roverMecanum/)` | MaixVision / packaged app — Xbox → UART pipeline                               |
+| `[tools/](tools/)`                               | PowerShell + Python scripts to test from a PC                                  |
+| `[microbit/PROTOCOL.md](microbit/PROTOCOL.md)`   | Protocol index → [EN](microbit/PROTOCOL_EN.md) / [FR](microbit/PROTOCOL_FR.md) |
+
+
+
 
 ### Documentation index
 
-| Document | Language | Topic |
-|----------|----------|-------|
-| [README.md](README.md) | English | Project overview (this file) |
-| [README_FR.md](README_FR.md) | French | Full guide, flash, wiring, troubleshooting |
-| [maixcam/roverMecanum/README.md](maixcam/roverMecanum/README.md) | — | App doc index |
-| [maixcam/roverMecanum/README_EN.md](maixcam/roverMecanum/README_EN.md) | English | Xbox mapping, deploy, camera HUD |
-| [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) | French | Same as EN |
-| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md) | French | Bluetooth / BlueZ on MaixCam2 |
-| [microbit/PROTOCOL_EN.md](microbit/PROTOCOL_EN.md) | English | UART binary protocol |
-| [microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md) | French | Same as EN |
+
+| Document                                                               | Language | Topic                                      |
+| ---------------------------------------------------------------------- | -------- | ------------------------------------------ |
+| [README.md](README.md)                                                 | English  | Project overview (this file)               |
+| [README_FR.md](README_FR.md)                                           | French   | Full guide, flash, wiring, troubleshooting |
+| [maixcam/roverMecanum/README.md](maixcam/roverMecanum/README.md)       | —        | App doc index                              |
+| [maixcam/roverMecanum/README_EN.md](maixcam/roverMecanum/README_EN.md) | English  | Xbox mapping, deploy, camera HUD           |
+| [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) | French   | Same as EN                                 |
+| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md)             | French   | Bluetooth / BlueZ on MaixCam2              |
+| [microbit/PROTOCOL_EN.md](microbit/PROTOCOL_EN.md)                     | English  | UART binary protocol                       |
+| [microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md)                     | French   | Same as EN                                 |
+
+
+
 
 ### Firmware highlights
 
 - Dual serial: **edge UART (P1/P2)** for the MaixCam + **USB mbed** for PC debugging
 - Named presets (forward, strafe, spin, pivot…) and **RAW** per-wheel control
-- **Joystick frame `0x30`** — strafe, forward, spin, pivot with proportional speed and deadzone
+- **Joystick frame** `0x30` — strafe, forward, spin, pivot with proportional speed and deadzone
 - ACK bytes `0x55 + CMD` after valid frames
+
+
 
 ### MaixCam app highlights
 
@@ -77,7 +85,11 @@ Full app docs: [maixcam/roverMecanum/README_EN.md](maixcam/roverMecanum/README_E
 
 ---
 
+
+
 ## Quick start
+
+
 
 ### 1. Flash the micro:bit
 
@@ -86,7 +98,7 @@ cd microbit
 pio run -t upload
 ```
 
-Plug the micro:bit via **USB** (data cable). Windows should show a **`MICROBIT`** drive — PlatformIO copies the `.hex` there.  
+Plug the micro:bit via **USB** (data cable). Windows should show a `MICROBIT` drive — PlatformIO copies the `.hex` there.  
 UART to the rover uses **P1 = TX**, **P2 = RX** on the edge connector (115200 8N1).
 
 ### 2. Test from your PC (no MaixCam needed)
@@ -116,9 +128,11 @@ bridge holds the Python GIL. Judging display fluidity on the **packaged** app.
 
 ---
 
+
+
 ## Protocol in one minute
 
-Every frame starts with sync byte **`0xAA`**. Simple preset move:
+Every frame starts with sync byte `0xAA`. Simple preset move:
 
 ```
 [0xAA] [CMD] [SPEED 0-255] [CHECKSUM]
@@ -137,19 +151,25 @@ The firmware mixes all four axes into per-wheel speeds — you can combine forwa
 
 ---
 
+
+
 ## Hardware wiring (MaixCam ↔ micro:bit)
 
-| MaixCam2 | micro:bit edge |
-|----------|----------------|
-| A21 (UART4 TX) | **P2 (RX)** |
-| A22 (UART4 RX) | **P1 (TX)** |
-| GND | GND |
+
+| MaixCam2       | micro:bit edge |
+| -------------- | -------------- |
+| A21 (UART4 TX) | **P2 (RX)**    |
+| A22 (UART4 RX) | **P1 (TX)**    |
+| GND            | GND            |
+
 
 > TX → RX (croisé). Si A21 va sur P1 et A22 sur P2, la com ne marche pas.
 
 Motor board stays on the Keyestudio harness (I2C `0x30`, PWM channels 1–8).
 
 ---
+
+
 
 ## For developers
 
@@ -162,23 +182,23 @@ French docs cover flash troubleshooting, Windows COM ports, and Python examples 
 
 ---
 
+
+
 ## Pictures
 
 Click any thumbnail to open the full-resolution image.
 
-<p align="center">
-  <a href="resources/MaixCam2_Mecanum_Rover2.jpg"><img src="resources/MaixCam2_Mecanum_Rover2.jpg" width="240" alt="Top view — MaixPy booting"></a>
-  &nbsp;
-  <a href="resources/MaixCam2_Mecanum_Rover3.jpg"><img src="resources/MaixCam2_Mecanum_Rover3.jpg" width="240" alt="Bluetooth pairing screen"></a>
-  &nbsp;
-  <a href="resources/MaixCam2_Mecanum_Rover4.jpg"><img src="resources/MaixCam2_Mecanum_Rover4.jpg" width="240" alt="Live FPV with Xbox HUD"></a>
-</p>
+![Top view — MaixPy booting](resources/MaixCam2_Mecanum_Rover2.jpg)   ![Bluetooth pairing screen](resources/MaixCam2_Mecanum_Rover3.jpg)   ![Live FPV with Xbox HUD](resources/MaixCam2_Mecanum_Rover4.jpg)
 
-| | | |
-|:---:|:---:|:---:|
+
+|                                        |                                                   |                                                      |
+| -------------------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
 | **Top view** — MaixPy boot on MaixCam2 | **Pairing** — connect an Xbox controller over BLE | **Driving** — camera feed + stick gauges + speed bar |
 
+
 ---
+
+
 
 ## References
 
@@ -186,6 +206,8 @@ Click any thumbnail to open the full-resolution image.
 - Original text serial commands: `examples/LiaisonSerie.txt` (replaced by binary protocol here)
 
 ---
+
+
 
 ## License / contributions
 
