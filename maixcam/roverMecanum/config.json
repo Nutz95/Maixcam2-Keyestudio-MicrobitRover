@@ -1,24 +1,43 @@
 {
   "mapping_revision": 4,
   "controller_name": "Xbox Wireless Controller",
+  "controller_name_aliases": [],
   "controller_mac": "",
+  "bluetooth_scan_timeout_sec": 20,
   "camera": {
     "enabled": true,
-    "width": 1280,
-    "height": 720,
+    "width": 640,
+    "height": 480,
     "fps": 30,
-    "format": "yuv420",
-    "display_fps": 15
+    "format": "rgb888",
+    "display_fps": 20
   },
   "rover": {
     "max_speed": 255,
-    "send_interval_ms": 30,
+    "send_interval_ms": 10,
     "deadzone_percent": 5,
     "axis_sensitivity_percent": 70,
     "axis_expo": 2.2,
     "axis_curve": "expo",
     "speed_step": 5,
     "wait_ack": false
+  },
+  "timing": {
+    "main_loop_sleep_ms": 10,
+    "teleop_poll_sleep_ms": 5,
+    "config_reload_ms": 500,
+    "touch_debounce_ms": 900,
+    "speed_debounce_ms": 160,
+    "evdev_retry_ms": 250,
+    "evdev_open_attempts": 8,
+    "hid_wait_ms": 12000,
+    "hid_quick_wait_ms": 5000,
+    "camera_ready_timeout_ms": 8000,
+    "camera_ready_poll_ms": 20,
+    "camera_paused_poll_ms": 40,
+    "camera_frame_yield_ms": 1,
+    "camera_no_frame_sleep_ms": 5,
+    "camera_stop_join_ms": 2500
   },
   "mapping": {
     "axes": {

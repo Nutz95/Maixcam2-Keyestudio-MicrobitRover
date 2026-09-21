@@ -6,6 +6,13 @@ Deploy from Windows: `tools/deploy_rover_mecanum.ps1`
 
 UART protocol (Little Endian, 12-byte frame): [`../../microbit/PROTOCOL_EN.md`](../../microbit/PROTOCOL_EN.md)
 
+**HUD note:** under MaixVision (USB debug), the HUD can lag 1–2 s while motors
+already respond — the IDE bridge holds the Python GIL. Packaged app on-device
+is fluid; judge IHM smoothness on the installed app, not MaixVision alone.
+
+Settings are deserialized into typed `AppConfig` (`settings().camera.display_fps`);
+loop sleeps live under `timing` in `config.json`.
+
 ---
 
 ## Xbox controller diagram
@@ -60,13 +67,22 @@ Full-speed movement while pressed (overrides sticks).
 
 ---
 
-## 1080p camera
+## Camera (640×480)
 
-Live preview with HUD overlay. Disable with:
+Live RGB preview with HUD overlay (pairing progress bar while busy). Defaults:
 
 ```json
-"camera": { "enabled": false }
+"camera": {
+  "enabled": true,
+  "width": 640,
+  "height": 480,
+  "fps": 30,
+  "format": "rgb888",
+  "display_fps": 20
+}
 ```
+
+Disable with `"enabled": false`.
 
 ---
 
@@ -80,7 +96,7 @@ Live preview with HUD overlay. Disable with:
 
 | Module | Role |
 |--------|------|
-| `camera_preview_service.py` | 1080p capture thread |
+| `camera_preview_service.py` | 640×480 capture thread (RGB for HUD) |
 | `controller_mapping_engine.py` | Gamepad → forward, strafe, spin, pivot |
 | `joystick_frame_builder.py` | UART frame builder |
 | `ProtocolParser.h` (micro:bit) | `UartIncomingFrame`, readable byte names |

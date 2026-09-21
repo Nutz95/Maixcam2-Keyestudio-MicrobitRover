@@ -4,55 +4,58 @@
 
 ```shell
 bluetoothctl power on
-echo "bluetoothctl power on" >> /etc/rc.local
+bluetoothctl pairable on
 ```
 
 BlueZ (`bluetoothctl`) est fourni par Ubuntu sur MaixCam2 — pas de dépendance Python supplémentaire.
 
 Doc Sipeed : https://wiki.sipeed.com/maixpy/doc/en/modules/bluetooth.html
 
-## Application production
+## Pairing chiffré (obligatoire pour le joystick)
 
-L'app packagée **`maixcam/roverMecanum/`** gère le scan, l'appairage et la connexion Xbox via **bluetoothctl** + **evdev**.
+Sans bond chiffré, BlueZ peut afficher `Connected: yes` + UUID HID **sans** créer
+`/dev/input/event*` pour la manette. Les sticks ne marchent pas.
+
+L'app démarre un **bluetoothctl PTY** au lancement (`agent NoInputNoOutput`) et
+le laisse vivant jusqu'à la sortie. Contournement noyau 4.19 : `disable_ertm=Y`
+(appliqué au démarrage de l'app).
+
+| Bouton UI | Action |
+|-----------|--------|
+| **PAIR** | retire l'ancien bond + nouveau bond chiffré (hold **SYNC**, logo clignote vite) |
+| **CONNECT** | reconnecte un bond déjà bon (logo Xbox court, pas SYNC) |
+
+Succès réel = logo **fixe** + `HID reports flowing` dans les logs (pas seulement `Connected: yes`).
+
+Aussi : **oublier la manette sur le PC** pendant le pair (sinon elle reste collée au PC).
+
+## Application production
 
 | Composant | Rôle |
 |-----------|------|
-| `lib/bluetoothctl_runner.py` | Scan, pair, connect (BlueZ natif) |
+| `lib/bluetoothctl_session.py` | Session PTY longue durée + agent BlueZ |
+| `lib/bluetoothctl_runner.py` | Parse des sorties bluetoothctl |
 | `lib/bluetooth_pairing_service.py` | Flux PAIR / CONNECT de l'UI |
 | `lib/xbox_input_service.py` | Thread BT + poll evdev |
 
-## Déploiement MaixCam
-
 ```powershell
 cd tools
-.\deploy_rover_mecanum.ps1
+.\deploy_rover_mecanum.ps1 -DeployOnly -SyncConfig
 ```
-
-Installe dans `/root/roverMecanum/` (config, lib, script principal).
 
 Voir [`maixcam/roverMecanum/README_FR.md`](roverMecanum/README_FR.md) pour le mapping manette.
 
-## Manette Xbox
+## Erreurs fréquentes
 
-Ne jamais `bluetoothctl disconnect` (éteint la manette).
-
-Sans pairing chiffré, seuls les services Microsoft/batterie sont visibles
-(pas de joystick). C'est le comportement normal avant appairage.
-
-Erreurs fréquentes :
-- `device not found` → maintenir le bouton sync Xbox, relancer PAIR (scan bluetoothctl)
-- HID absent après connect → refaire pairing (`bluetoothctl remove MAC` puis relancer)
-
-L'exemple doc Sipeed qui lit `MODEL_NBR_UUID = 1A2A` est un exemple générique.
-Ce n'est **pas** le bon UUID pour piloter une manette.
+- Scan vide → SYNC clignotement rapide, <1 m, manette oubliée sur le PC
+- Boucle `Connected: yes` / `Connected: no` avant PAIR → ancien bond cassé (souvent firmware Xbox / noyau 4.19). Appuyer **PAIR** (l'app fait `remove` + re-bond). Si le scan ne trouve rien, l'app lit aussi `bluetoothctl devices`
+- Logo clignote + Connected yes/no après PAIR → firmware Xbox pas à jour via **Xbox Accessories** (Windows), puis re-PAIR
+- HID UUID sans event → PAIR (remove + bond chiffré)
+- Crash `JSONDecodeError` sur `config.json` → corrigé (écriture atomique) ; si le fichier est encore vide, redéployer `-SyncConfig`
+- Ne jamais `bluetoothctl disconnect` hors PAIR (éteint souvent la manette)
 
 ## Deadzone joystick rover
 
 Le firmware micro:bit applique une deadzone de **2%** par défaut (`DEFAULT_JOYSTICK_DEADZONE_PERCENT`).
 
-Les tests PC avec de petites valeurs reçoivent bien un ACK mais **ne bougent pas** les moteurs :
-c'est normal si la valeur est sous la deadzone.
-
-Pour tester :
-- app MaixCam : sticks Xbox
-- menu Windows `tools/test_rover_menu.py` → `j` : utiliser par ex. `X=0`, `Y=-20000`
+Pour tester sans MaixCam : `tools/test_rover_menu.py` → `j` avec par ex. `X=0`, `Y=-20000`.

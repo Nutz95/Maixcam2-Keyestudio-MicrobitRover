@@ -111,6 +111,9 @@ Open `maixcam/roverMecanum` in MaixVision and run `main.py`.
 
 **Packaged app:** build from `app.yaml`, install to `/maixapp/apps/mecanum_rover_controler/`.
 
+HUD lag under MaixVision (USB debug) with responsive motors is expected — the IDE
+bridge holds the Python GIL. Judging display fluidity on the **packaged** app.
+
 ---
 
 ## Protocol in one minute
@@ -138,9 +141,11 @@ The firmware mixes all four axes into per-wheel speeds — you can combine forwa
 
 | MaixCam2 | micro:bit edge |
 |----------|----------------|
-| A21 (UART TX) | P2 (RX) |
-| A22 (UART RX) | P1 (TX) |
+| A21 (UART4 TX) | **P2 (RX)** |
+| A22 (UART4 RX) | **P1 (TX)** |
 | GND | GND |
+
+> TX → RX (croisé). Si A21 va sur P1 et A22 sur P2, la com ne marche pas.
 
 Motor board stays on the Keyestudio harness (I2C `0x30`, PWM channels 1–8).
 

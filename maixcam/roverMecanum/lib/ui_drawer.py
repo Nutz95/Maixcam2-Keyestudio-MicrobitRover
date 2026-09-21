@@ -16,13 +16,15 @@ class UiDrawer:
     pad = 8
     back_size = 44
     self._back_pad = [pad, pad, back_size, back_size]
-    disc_w, disc_h = 52, 32
-    self._disconnect_rect = [self.width - disc_w - pad, pad, disc_w, disc_h]
-    y = self.height - 52
-    gap = 10
+    # Finger-sized (MaixAiRover): ~72 px tall, full bottom half-width each.
+    btn_h = 72
+    gap = 12
+    y = self.height - btn_h - 10
     half_w = (self.width - gap * 3) // 2
-    self._pair_rect = [gap, y, half_w, 44]
-    self._connect_rect = [gap * 2 + half_w, y, half_w, 44]
+    self._pair_rect = [gap, y, half_w, btn_h]
+    self._connect_rect = [gap * 2 + half_w, y, half_w, btn_h]
+    self._disconnect_rect = [gap, y, half_w, btn_h]
+    self._bottom_bar_top = y - 10
 
   def back_rect(self):
     return list(self._back_pad)
@@ -36,8 +38,8 @@ class UiDrawer:
   def disconnect_rect(self):
     return list(self._disconnect_rect)
 
-  def draw_overlay(self, img, connected, busy, state, drive, max_speed=255):
-    """Draw HUD: speed bar, sticks, triggers, d-pad, connection buttons."""
+  def draw_overlay(self, img, connected, busy, state, drive, max_speed=255, status="", progress=0.0):
+    """Draw HUD: speed bar, sticks, triggers, d-pad, pairing progress, buttons."""
     bx, by, bw, bh = self._back_pad
     img.draw_rect(bx, by, bw, bh, image.Color.from_rgb(0, 0, 0), thickness=-1)
     icon_x = bx + (bw - self._img_back.width()) // 2
@@ -45,12 +47,13 @@ class UiDrawer:
     img.draw_image(icon_x, icon_y, self._img_back)
 
     if connected:
-      self._draw_button(img, self.disconnect_rect(), "DISC", image.Color.from_rgb(180, 60, 40))
+      self._draw_bottom_bar(img)
+      self._draw_button(img, self.disconnect_rect(), "DISCONNECT", image.Color.from_rgb(180, 60, 40))
       lb = state.buttons.get("btn_lb", False)
       rb = state.buttons.get("btn_rb", False)
       self._draw_speed_bar(img, max_speed, lb, rb)
 
-      gauge_cy = self.height // 2 + 8
+      gauge_cy = self.height // 2 - 20
       radius = min(68, (self.width - 120) // 4)
       bar_h = radius * 2 + 6
       bar_y = gauge_cy - bar_h // 2
@@ -73,12 +76,38 @@ class UiDrawer:
       self._draw_dpad(img, self.width // 2, gauge_cy + radius + 28, state.dpad_x, state.dpad_y)
     elif busy:
       self._draw_bottom_bar(img)
+      self._draw_progress(img, status, progress)
       self._draw_button(img, self.pair_rect(), "...", image.Color.from_rgb(80, 80, 80))
       self._draw_button(img, self.connect_rect(), "...", image.Color.from_rgb(80, 80, 80))
     else:
       self._draw_bottom_bar(img)
       self._draw_button(img, self.pair_rect(), "PAIR", image.Color.from_rgb(40, 80, 160))
       self._draw_button(img, self.connect_rect(), "CONNECT", image.Color.from_rgb(40, 120, 60))
+
+  def _draw_progress(self, img, status, progress):
+    """Show pairing/connect status text and a simple progress bar."""
+    pct = max(0.0, min(1.0, float(progress)))
+    bar_x = 24
+    bar_w = self.width - 48
+    bar_y = self.height // 2 - 10
+    bar_h = 18
+    label = status or "Working..."
+    size = image.string_size(label, scale=1.1, thickness=1)
+    img.draw_string(
+      (self.width - size.width()) // 2,
+      bar_y - 28,
+      label,
+      image.COLOR_WHITE,
+      scale=1.1,
+    )
+    img.draw_rect(bar_x, bar_y, bar_w, bar_h, image.Color.from_rgb(30, 30, 30), thickness=-1)
+    img.draw_rect(bar_x, bar_y, bar_w, bar_h, image.COLOR_WHITE, thickness=1)
+    fill = int((bar_w - 4) * pct)
+    if fill > 0:
+      img.draw_rect(
+        bar_x + 2, bar_y + 2, fill, bar_h - 4,
+        image.Color.from_rgb(60, 160, 220), thickness=-1,
+      )
 
   def _draw_speed_bar(self, img, max_speed, lb_pressed, rb_pressed):
     """Top horizontal max-speed gauge; LB/RB adjust speed in the app loop."""
@@ -106,8 +135,17 @@ class UiDrawer:
     img.draw_string(x + w + 8, y + 5, "RB", image.COLOR_WHITE, scale=0.85)
 
   def _draw_bottom_bar(self, img):
-    y = self.height - 58
-    img.draw_rect(0, y - 6, self.width, 58, image.Color.from_rgb(0, 0, 0), thickness=-1)
+    y = self._bottom_bar_top
+    img.draw_rect(0, y, self.width, self.height - y, image.Color.from_rgb(0, 0, 0), thickness=-1)
+
+  def _draw_button(self, img, rect, label, color):
+    img.draw_rect(rect[0], rect[1], rect[2], rect[3], color, thickness=-1)
+    img.draw_rect(rect[0], rect[1], rect[2], rect[3], image.COLOR_WHITE, thickness=2)
+    scale = 1.4 if rect[3] >= 64 else 1.1
+    size = image.string_size(label, scale=scale, thickness=1)
+    tx = rect[0] + (rect[2] - size.width()) // 2
+    ty = rect[1] + (rect[3] - size.height()) // 2
+    img.draw_string(tx, ty, label, image.COLOR_WHITE, scale=scale)
 
   def _draw_gauge(self, img, cx, cy, axis_x, axis_y, radius=72, label=""):
     img.draw_circle(cx, cy, radius, image.Color.from_rgb(40, 40, 40), thickness=2)
@@ -148,14 +186,6 @@ class UiDrawer:
       img.draw_rect(x + 3, fy, w - 6, fill_h, color, thickness=-1)
     size = image.string_size(label, scale=1.0, thickness=1)
     img.draw_string(x + (w - size.width()) // 2, y + h + 2, label, image.COLOR_WHITE, scale=1.0)
-
-  def _draw_button(self, img, rect, label, color):
-    img.draw_rect(rect[0], rect[1], rect[2], rect[3], color, thickness=-1)
-    img.draw_rect(rect[0], rect[1], rect[2], rect[3], image.COLOR_WHITE, thickness=2)
-    size = image.string_size(label, scale=1.1, thickness=1)
-    tx = rect[0] + (rect[2] - size.width()) // 2
-    ty = rect[1] + (rect[3] - size.height()) // 2
-    img.draw_string(tx, ty, label, image.COLOR_WHITE, scale=1.1)
 
   def _load_back_btn(self, width):
     img = image.load("/maixapp/share/icon/ret.png")

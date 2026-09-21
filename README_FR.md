@@ -266,7 +266,13 @@ Puis ouvrir `maixcam/roverMecanum` dans MaixVision et exécuter `main.py`.
 
 - Manette Xbox via Bluetooth (BlueZ + evdev)
 - Prévisualisation caméra + HUD sticks / vitesse
-- UART MaixCam2 : A21(TX) / A22(RX) vers micro:bit P2/P1
+- UART MaixCam2 : **A21(TX) → P2(RX)**, **A22(RX) → P1(TX)**, GND commun (TX vers RX)
+
+**HUD / latence :** sous MaixVision (debug USB), l'affichage peut sembler lent
+(+1–2 s) alors que les moteurs répondent déjà — le bridge IDE charge le GIL.
+Une fois l'app **packagée** et lancée en autonome sur la MaixCam2, le HUD
+redevient fluide. Valider la fluidité IHM sur l'app installée, pas seulement
+depuis MaixVision.
 
 Voir [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) et [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md).
 

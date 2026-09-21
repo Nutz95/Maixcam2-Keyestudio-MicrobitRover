@@ -1,3 +1,4 @@
+import os
 import select
 import struct
 
@@ -16,7 +17,7 @@ _VALID_EV_TYPES = {0, 1, 2, 3, 4, 0x11, 0x14, 0x15, 0x17}
 
 
 class EvdevReader:
-  """Read Xbox evdev events (input thread only)."""
+  """Read Xbox evdev events (teleop thread only)."""
 
   def __init__(self, event_path, config=None):
     self.event_path = event_path
@@ -30,6 +31,7 @@ class EvdevReader:
     self._observed = {}
     self._file = None
     self.event_count = 0
+    self.kernel_state_available = False
     self._lt_btn = 0
     self._rt_btn = 0
     self._dpad_x = 0
@@ -38,7 +40,9 @@ class EvdevReader:
     self._dpad_btn_y = 0
 
   def open(self):
-    self._file = open(self.event_path, "rb")
+    """Open evdev unbuffered/non-blocking. Buffered ``open()`` blocks on 8K reads."""
+    fd = os.open(self.event_path, os.O_RDONLY | os.O_NONBLOCK)
+    self._file = os.fdopen(fd, "rb", buffering=0)
     self._init_mappers()
 
   def _init_mappers(self):
@@ -46,13 +50,16 @@ class EvdevReader:
     layout = self._layout
     trigger_codes = {layout.lt, layout.rt}
     for code in (layout.left_x, layout.left_y, layout.right_x, layout.right_y, layout.lt, layout.rt):
+      prefer_trigger = code in trigger_codes
       info = read_absinfo(self._file, code)
       if info is not None:
-        raw = info[0]
-      else:
-        min_v, max_v, flat = self._axis_range(code)
-        raw = (min_v + max_v) // 2
-      self._ensure_mapper(code, raw)
+        self.kernel_state_available = True
+        raw, min_v, max_v, flat = info
+        self._ensure_mapper_with_range(code, raw, min_v, max_v, flat, prefer_trigger)
+        continue
+      min_v, max_v, flat = self._axis_range(code, prefer_trigger)
+      raw = min_v if prefer_trigger else (min_v + max_v) // 2
+      self._ensure_mapper_with_range(code, raw, min_v, max_v, flat, prefer_trigger)
 
   def close(self):
     if self._file is not None:
@@ -63,19 +70,14 @@ class EvdevReader:
       self._file = None
 
   def drain_available(self):
-    """Read every pending evdev event (non-blocking)."""
+    """Read pending evdev events (non-blocking, capped)."""
     return self._drain_events()
 
   def poll_inputs(self):
-    """
-    One input frame: events for buttons, then kernel ABS truth for sticks.
-
-    Axes are read via EVIOCGABS every poll so missed evdev packets cannot
-    leave sticks stuck at the last value.
-    """
+    """Buttons from a short event drain; sticks from EVIOCGABS (current kernel value)."""
     if self._file is None:
       return
-    self.drain_available()
+    self._drain_events()
     self.sync_axes_from_kernel()
 
   def sync_axes_from_kernel(self):
@@ -85,19 +87,31 @@ class EvdevReader:
     for code in (layout.left_x, layout.left_y, layout.right_x, layout.right_y, layout.lt, layout.rt):
       info = read_absinfo(self._file, code)
       if info is not None:
+        self.kernel_state_available = True
         raw, min_v, max_v, flat = info
         self._ensure_mapper_with_range(code, raw, min_v, max_v, flat, code in trigger_codes)
         continue
+      if self.kernel_state_available:
+        continue
       val = self._sysfs.read_abs_value(self.event_path, code)
       if val is not None:
+        self.kernel_state_available = True
         self._feed_abs(code, val)
     self._sync_axes()
 
   def _ensure_mapper_with_range(self, code, raw, min_v, max_v, flat, prefer_trigger):
+    """Create or refresh a mapper when kernel absinfo arrives."""
+    if prefer_trigger and max_v - min_v > 1024:
+      prefer_trigger = False
     mapper = self._mappers.get(code)
-    if mapper is None:
-      if prefer_trigger and max_v - min_v > 1024:
-        prefer_trigger = False
+    needs_rebuild = (
+      mapper is None
+      or mapper.min_v != min_v
+      or mapper.max_v != max_v
+      or mapper.flat != flat
+      or isinstance(mapper, EvdevTriggerMapper) != prefer_trigger
+    )
+    if needs_rebuild:
       mapper = (
         EvdevTriggerMapper(min_v, max_v, flat)
         if prefer_trigger
@@ -107,19 +121,25 @@ class EvdevReader:
     mapper.set_raw(raw)
 
   def _drain_events(self):
+    # Cap: a moving stick streams ABS forever. Draining until empty holds the GIL
+    # and the HUD (Python draw) falls seconds behind the motors.
     if self._file is None:
       return 0
     count = 0
-    while self._file is not None:
+    while count < 24 and self._file is not None:
       ready, _, _ = select.select([self._file], [], [], 0)
       if not ready:
         break
       try:
-        data = self._file.read(self._ev_size)
-      except OSError as exc:
-        if exc.errno == 19:
-          raise
+        data = os.read(self._file.fileno(), self._ev_size)
+      except BlockingIOError:
         break
+      except OSError as exc:
+        if exc.errno in (11, 19):  # EAGAIN / ENODEV
+          if exc.errno == 19:
+            raise
+          break
+        raise
       if not data or len(data) < self._ev_size:
         break
       self._process_event(data)
@@ -136,11 +156,11 @@ class EvdevReader:
     elif ev_type == EV_SYN and code == SYN_REPORT:
       pass
 
-  def _axis_range(self, code):
+  def _axis_range(self, code, prefer_trigger=False):
     info = self._sysfs.read_absinfo_real(self.event_path, code)
     if info is not None:
       return info
-    return default_abs_range(code)
+    return default_abs_range(code, prefer_trigger=prefer_trigger)
 
   def _create_mapper(self, code, prefer_trigger):
     min_v, max_v, flat = self._axis_range(code, prefer_trigger)
@@ -251,10 +271,13 @@ class EvdevReader:
 
     chunk = b""
     try:
-      with open(event_path, "rb") as f:
-        ready, _, _ = select.select([f], [], [], 0.3)
+      fd = os.open(event_path, os.O_RDONLY | os.O_NONBLOCK)
+      try:
+        ready, _, _ = select.select([fd], [], [], 0.3)
         if ready:
-          chunk = f.read(256)
+          chunk = os.read(fd, 256)
+      finally:
+        os.close(fd)
     except OSError:
       pass
 

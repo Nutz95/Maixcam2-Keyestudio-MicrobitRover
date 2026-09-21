@@ -2,6 +2,10 @@
 
 Installation sur la caméra : `/root/roverMecanum/`
 
+**Avant le premier PAIR :** mettre à jour le firmware de la manette Xbox via
+**Windows → Xbox Accessories** (Microsoft Store). Sans ça, logo qui clignote +
+boucle `Connected: yes/no` sur le noyau 4.19. Détails : [`../bluetooth_Readme.md`](../bluetooth_Readme.md).
+
 Déploiement Windows : `tools/deploy_rover_mecanum.ps1`  
 Pour pousser **config.json** du repo vers la caméra : `.\deploy_rover_mecanum.ps1 -SyncConfig`
 
@@ -17,6 +21,15 @@ Au démarrage, la console affiche :
 `config: path=... max_speed=... deadzone=...% sensitivity=...% expo=...`
 
 Le fichier est **rechargé à chaud** si tu le modifies sur la MaixCam (sans redémarrer).
+Le code lit un objet typé (`AppConfig` / `settings().camera.display_fps`, etc.),
+pas des clés string éparpillées — section `timing` pour tous les sleeps de boucle.
+
+## MaixVision vs app packagée (HUD)
+
+Sous **MaixVision** (run debug USB), le HUD peut avoir 1–2 s de retard alors
+que le teleop UART est déjà réactif : le bridge IDE monopolise le GIL Python.
+Sur l'app **packagée** lancée depuis le menu MaixCam2, l'affichage est fluide.
+Mesurer la fluidité IHM sur le binaire installé.
 
 ## Réglages manette / rover (`rover`)
 
@@ -104,14 +117,15 @@ Preview vidéo + HUD. Écran MaixCam2 : **480×640 portrait**.
 
 | Clé | Défaut | Description |
 |-----|--------|-------------|
-| `width` / `height` | `1280` / `720` | Résolution capteur (preview redimensionnée à l'écran) |
+| `width` / `height` | `640` / `480` | Résolution capteur (preview redimensionnée à l'écran) |
 | `fps` | `30` | FPS capture |
-| `format` | `yuv420` | `yuv420` (recommandé), `rgb888` max ~640×480 sur MaixCam2 |
-| `display_fps` | `15` | FPS HUD — garder bas pour ne pas bloquer la manette |
+| `format` | `rgb888` | Requis pour le HUD `draw_*` sur MaixCam2 (YUV forcé en RGB) |
+| `display_fps` | `20` | Cadence cible du HUD (ms = 1000 / display_fps) |
 
-**Priorité manette** : evdev est lu sur la boucle principale (~1 ms). La caméra et l'affichage tournent en threads séparés avec pacing.
+**Threads :** teleop (evdev + UART) en arrière-plan ; touch + `display.show` sur le
+thread principal (API Maix). Les sleeps de boucle sont dans `timing` (`config.json`).
 
-Latence minimale vidéo : `"width": 480, "height": 640, "format": "yuv420"`.
+Pendant PAIR/CONNECT : barre de progression + statut au centre de l'écran.
 
 Désactiver la caméra : `"enabled": false`.
 

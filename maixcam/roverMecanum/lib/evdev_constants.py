@@ -33,11 +33,17 @@ AXIS_MAX = 32767
 # Microsoft USB vendor id (045e) — used to spot Xbox pads in /sys.
 XBOX_VENDOR_ID = "045e"
 
-# Axis codes probed when auto-detecting stick/trigger layout.
-XBOX_AXIS_CODES = (
-  ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ,
-  ABS_HAT0X, ABS_HAT0Y, ABS_GAS, ABS_BRAKE,
-)
+# Default ABS ranges when sysfs/ioctl metadata is unavailable.
+# ABS_Z / ABS_RZ are layout-dependent (stick on maixcam_bt, trigger on USB
+# standard) — never assume trigger here; callers pass prefer_trigger.
+_ALWAYS_TRIGGER_CODES = frozenset({ABS_GAS, ABS_BRAKE})
+
+
+def default_abs_range(axis_code, prefer_trigger=False):
+  """Fallback min/max/flat when the kernel absinfo is missing."""
+  if prefer_trigger or axis_code in _ALWAYS_TRIGGER_CODES:
+    return 0, 1023, 64
+  return 0, 65535, 4096
 
 # --- Button codes (BTN_*) --------------------------------------------------
 
