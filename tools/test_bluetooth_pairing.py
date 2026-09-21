@@ -21,7 +21,7 @@ Discovery started
 class TestBluetoothScanParse(unittest.TestCase):
   def test_parse_new_device_line_with_name(self):
     runner = BluetoothctlRunner()
-    mac, name = runner._parse_device_line(
+    mac, name = runner.parse_device_line(
       "[NEW] Device 78:86:2E:AC:8D:03 Xbox Wireless Controller"
     )
     self.assertEqual(mac, "78:86:2E:AC:8D:03")
@@ -57,7 +57,7 @@ Pairing successful
 
   def test_match_scan_output(self):
     runner = BluetoothctlRunner()
-    exact, partial, seen = runner._match_scan_output(
+    exact, partial, seen = runner.match_scan_output(
       SAMPLE, ["xbox wireless controller"]
     )
     self.assertEqual(exact, "78:86:2E:AC:8D:03")
@@ -68,7 +68,7 @@ Pairing successful
     """Known pads appear as ``Device MAC Name`` without [NEW]."""
     runner = BluetoothctlRunner()
     listing = "Device 78:86:2E:97:BD:9C Xbox Wireless Controller\n"
-    exact, partial, seen = runner._match_scan_output(
+    exact, partial, seen = runner.match_scan_output(
       listing, ["xbox wireless controller"]
     )
     self.assertEqual(exact, "78:86:2E:97:BD:9C")

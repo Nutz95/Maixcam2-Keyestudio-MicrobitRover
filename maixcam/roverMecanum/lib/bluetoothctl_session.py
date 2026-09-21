@@ -21,8 +21,9 @@ class BluetoothctlSession:
     self._proc = None
     self._alive = False
 
-  def _sleep_ms(self, ms: int) -> None:
-    time.sleep(self._timing.sleep_s(ms))
+  def _kernel_settle(self) -> None:
+    """Wait when BlueZ emits no useful completion line (HCI cool-down)."""
+    time.sleep(self._timing.sleep_s(self._timing.bt_kernel_settle_ms))
 
   def start(self):
     """Power on, pairable, register agent; keep the process running."""
@@ -42,13 +43,16 @@ class BluetoothctlSession:
     self._master = master
     self._alive = True
     threading.Thread(target=self._read_loop, daemon=True, name="btctl-pty").start()
-    # BlueZ needs a short settle after PTY open before commands stick.
-    self._sleep_ms(self._timing.bt_settle_short_ms)
     self.send("power on")
     self.send("pairable on")
+    mark = self._mark()
     self.send("agent NoInputNoOutput")
     self.send("default-agent")
-    self._sleep_ms(self._timing.bt_settle_short_ms)
+    self._wait_since(
+      mark,
+      ("Agent registered", "Default agent request successful"),
+      self._timing.bt_connect_timeout_s,
+    )
     print("bt: agent alive (NoInputNoOutput)")
 
   def close(self):
@@ -87,8 +91,8 @@ class BluetoothctlSession:
     mac = mac.upper()
     print("bt: PAIR = remove old bond + encrypted re-pair (hold SYNC)")
     self._remove_bond(mac)
-    # After remove, kernel/BlueZ needs settle before a new LE pair sticks.
-    self._sleep_ms(self._timing.bt_settle_long_ms)
+    # ponytail: BlueZ remove completes but HCI/LE still needs cool-down; no line.
+    self._kernel_settle()
 
     pair_out = ""
     seen = ""
@@ -115,14 +119,13 @@ class BluetoothctlSession:
       self.send("scan off")
       if attempt == 0:
         self._remove_device(mac)
-        self._sleep_ms(self._timing.bt_settle_long_ms)
+        self._kernel_settle()
 
-    self.send("scan off")
+    self._scan_off()
     if not BluetoothctlRunner.pair_succeeded(pair_out):
       return seen + pair_out
 
     self.send(f"trust {mac}")
-    self._sleep_ms(self._timing.bt_settle_medium_ms)
     return seen + pair_out + self.info(mac)
 
   def connect(self, mac):
@@ -138,8 +141,7 @@ class BluetoothctlSession:
       self._timing.bt_connect_timeout_s,
     )
     if "Failed to connect" in out or "Paired: no" in out:
-      self.send(f"info {mac}")
-      self._sleep_ms(self._timing.bt_settle_short_ms)
+      self.info(mac)
       return self._since(mark)
     self._wait_hid_ready(mac)
     return self._since(mark)
@@ -149,8 +151,13 @@ class BluetoothctlSession:
     self.start()
     mark = self._mark()
     self.send(f"info {mac}")
-    self._sleep_ms(self._timing.bt_settle_medium_ms)
-    return BluetoothctlRunner.strip_ansi(self._since(mark))
+    return BluetoothctlRunner.strip_ansi(
+      self._wait_since(
+        mark,
+        ("Paired:", "Connected:", "Name:", "not available"),
+        self._timing.bt_connect_timeout_s,
+      )
+    )
 
   def _remove_bond(self, mac):
     mark0 = self._mark()
@@ -195,11 +202,20 @@ class BluetoothctlSession:
       self._timing.bt_connect_timeout_s,
     )
 
+  def _scan_off(self):
+    mark = self._mark()
+    self.send("scan off")
+    self._wait_since(
+      mark,
+      ("Discovering: no", "Discovery stopped"),
+      self._timing.sleep_s(self._timing.bt_scan_poll_ms) + 2.0,
+    )
+
   def scan_for_device_name(self, name, timeout_sec=20.0, aliases=None):
     """Find Xbox MAC via BlueZ device list, then discovery scan if needed."""
     self.start()
     runner = BluetoothctlRunner()
-    targets = runner._build_targets(name, aliases)
+    targets = runner.build_targets(name, aliases)
     print(
       f"  bt tip: hold Xbox SYNC until logo blinks fast"
       f" — scanning up to {timeout_sec:.0f}s for: {targets[0]!r}"
@@ -219,7 +235,7 @@ class BluetoothctlSession:
     poll_s = self._timing.sleep_s(self._timing.bt_scan_poll_ms)
     while time.time() < deadline:
       chunk = self._since(mark)
-      exact, partial, _seen = runner._match_scan_output(chunk, targets)
+      exact, partial, _seen = runner.match_scan_output(chunk, targets)
       mac = exact or partial or ""
       if mac:
         break
@@ -230,16 +246,19 @@ class BluetoothctlSession:
           break
         next_devices = time.time() + 3.0
       time.sleep(poll_s)
-    self.send("scan off")
-    self._sleep_ms(self._timing.bt_scan_poll_ms)
+    self._scan_off()
     return mac
 
   def _mac_from_devices(self, runner, targets):
     """Parse ``devices`` output for an Xbox name match."""
     mark = self._mark()
     self.send("devices")
-    self._sleep_ms(self._timing.bt_devices_query_ms)
-    exact, partial, _seen = runner._match_scan_output(self._since(mark), targets)
+    chunk = self._wait_since(
+      mark,
+      ("Device ",),
+      self._timing.sleep_s(self._timing.bt_devices_query_ms),
+    )
+    exact, partial, _seen = runner.match_scan_output(chunk, targets)
     return exact or partial or ""
 
   def _read_loop(self):

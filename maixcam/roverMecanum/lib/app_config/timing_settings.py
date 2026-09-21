@@ -1,4 +1,4 @@
-"""Loop / Bluetooth / evdev timing from config.json (harmonized buckets)."""
+"""Loop / Bluetooth / evdev timing from config.json."""
 
 from lib.app_config.parse_helpers import as_int, section
 
@@ -7,8 +7,9 @@ class TimingSettings:
   """
   Sleeps and waits in milliseconds.
 
-  Bluetooth uses three settle buckets (short/medium/long) plus poll intervals
-  so BlueZ delays stay consistent instead of 0.15 / 0.2 / 0.4 / 0.5 sprawl.
+  Bluetooth: poll intervals + one kernel settle (``bt_kernel_settle_ms``) used
+  only when BlueZ emits no useful completion line (post-remove HCI cool-down).
+  Everywhere else waits on bluetoothctl output.
   """
 
   __slots__ = (
@@ -16,7 +17,7 @@ class TimingSettings:
     "touch_debounce_ms", "speed_debounce_ms",
     "evdev_retry_ms", "evdev_open_attempts", "evdev_drain_max_events",
     "hid_wait_ms", "hid_quick_wait_ms",
-    "bt_settle_short_ms", "bt_settle_medium_ms", "bt_settle_long_ms",
+    "bt_kernel_settle_ms",
     "bt_poll_ms", "bt_scan_poll_ms", "bt_devices_query_ms",
     "bt_pair_timeout_s", "bt_connect_timeout_s", "bt_remove_timeout_s",
   )
@@ -34,9 +35,12 @@ class TimingSettings:
     self.evdev_drain_max_events = max(1, as_int(timing, "evdev_drain_max_events", 24))
     self.hid_wait_ms = max(1000, as_int(timing, "hid_wait_ms", 12000))
     self.hid_quick_wait_ms = max(500, as_int(timing, "hid_quick_wait_ms", 5000))
-    self.bt_settle_short_ms = max(50, as_int(timing, "bt_settle_short_ms", 400))
-    self.bt_settle_medium_ms = max(50, as_int(timing, "bt_settle_medium_ms", 500))
-    self.bt_settle_long_ms = max(100, as_int(timing, "bt_settle_long_ms", 2000))
+    # Legacy: accept old settle_long key if kernel settle is absent.
+    if "bt_kernel_settle_ms" in timing:
+      kernel_ms = as_int(timing, "bt_kernel_settle_ms", 2000)
+    else:
+      kernel_ms = as_int(timing, "bt_settle_long_ms", 2000)
+    self.bt_kernel_settle_ms = max(100, kernel_ms)
     self.bt_poll_ms = max(20, as_int(timing, "bt_poll_ms", 100))
     self.bt_scan_poll_ms = max(50, as_int(timing, "bt_scan_poll_ms", 200))
     self.bt_devices_query_ms = max(100, as_int(timing, "bt_devices_query_ms", 600))

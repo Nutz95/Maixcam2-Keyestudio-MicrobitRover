@@ -77,7 +77,7 @@ class BluetoothctlRunner:
     """Strip bluetoothctl color/control sequences."""
     return _ANSI_RE.sub("", text or "")
 
-  def _build_targets(self, name, aliases):
+  def build_targets(self, name, aliases):
     target = (name or "").lower().strip()
     targets = [target] if target else []
     if aliases:
@@ -91,13 +91,13 @@ class BluetoothctlRunner:
         targets.append(alias)
     return targets or ["xbox wireless controller"]
 
-  def _match_scan_output(self, output, targets):
+  def match_scan_output(self, output, targets):
     """Parse bluetoothctl device listings; return (exact_mac, partial_mac, seen)."""
     exact = None
     partial = None
     seen = 0
     for line in output.splitlines():
-      parsed = self._parse_device_line(line.strip())
+      parsed = self.parse_device_line(line.strip())
       if parsed is None:
         continue
       mac, device_name = parsed
@@ -119,7 +119,7 @@ class BluetoothctlRunner:
         break
     return exact, partial, seen
 
-  def _parse_device_line(self, line):
+  def parse_device_line(self, line):
     """Extract MAC + name from a bluetoothctl device line, or None."""
     if not line:
       return None

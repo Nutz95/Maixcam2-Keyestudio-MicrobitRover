@@ -11,6 +11,12 @@ from lib.controller_state import ControllerState
 from lib.evdev_device_finder import EvdevDeviceFinder
 from lib.evdev_reader import EvdevReader
 
+_PHASE_IDLE = "idle"
+_PHASE_PAIRING = "pairing"
+_PHASE_CONNECTING = "connecting"
+_PHASE_READY = "ready"
+_PHASE_FAILED = "failed"
+
 
 class XboxInputService:
   """BlueZ in background thread; evdev polled on teleop thread (MaixPy GIL)."""
@@ -29,6 +35,7 @@ class XboxInputService:
     self.progress = 0.0
     self.connected = False
     self.busy = False
+    self._phase = _PHASE_IDLE
     self._stop = threading.Event()
     self._thread = None
     self._reader = None
@@ -127,6 +134,7 @@ class XboxInputService:
       self.connected = False
       self.drive = None
       self.progress = 0.05
+      self._phase = _PHASE_PAIRING if force_pair else _PHASE_CONNECTING
     self._force_pair = force_pair
     self._set_status(
       "Pairing (hold SYNC)..." if force_pair else "Connecting...",
@@ -143,6 +151,7 @@ class XboxInputService:
       self.connected = False
       self.drive = None
       self.progress = 0.0
+      self._phase = _PHASE_IDLE
       if self.status == "Connected — drive":
         self.status = "Ready"
 
@@ -156,6 +165,10 @@ class XboxInputService:
       self.status = status
       if progress is not None:
         self.progress = float(progress)
+
+  def _set_phase(self, phase):
+    with self._lock:
+      self._phase = phase
 
   def _close_reader(self):
     with self._lock:
@@ -172,6 +185,7 @@ class XboxInputService:
       self.connected = False
       self.drive = None
       self.progress = 0.0
+      self._phase = _PHASE_IDLE
       self.status = status
 
   def _worker(self):
@@ -180,9 +194,11 @@ class XboxInputService:
       self.apply_config(self._config_store.settings())
 
       if self._force_pair:
+        self._set_phase(_PHASE_PAIRING)
         self._set_status("Pairing (hold SYNC)...", 0.1)
         scan = self._pairing.scan_for_controller()
         if not scan.ok():
+          self._set_phase(_PHASE_FAILED)
           self._set_status(scan.error, 0.0)
           return
         if self._stop.is_set():
@@ -192,47 +208,46 @@ class XboxInputService:
         print("--- bluetoothctl ---")
         print(result.output)
         if not result.ok():
+          self._set_phase(_PHASE_FAILED)
           self._set_status(result.error, 0.0)
           return
         self._set_status("Opening input...", 0.8)
-        handed_off = self._claim_hid()
+        handed_off = self.ensure_hid_input(self._app_config.timing.hid_wait_ms)
+        if handed_off:
+          self._set_phase(_PHASE_READY)
+        else:
+          self._set_phase(_PHASE_FAILED)
         return
 
       # CONNECT never disconnects: a failed reconnect must not power off the pad.
       with self._lock:
         already = self._handoff and self._reader is not None
       if already:
+        self._set_phase(_PHASE_READY)
         return
-      self._set_status("Connecting...", 0.2)
-      ev_path = self._finder.find_xbox_event()
-      if ev_path and self._can_open(ev_path):
-        print(f"input already present: {ev_path}")
-        handed_off = self._open_evdev(ev_path)
-        if handed_off:
-          return
-        print("input: event node unusable — trying BlueZ connect")
 
-      self._set_status("Waiting Xbox (agent on)...", 0.4)
-      ev_path = self._wait_for_input(
-        timeout_ms=self._app_config.timing.hid_quick_wait_ms,
-      )
-      if ev_path:
-        handed_off = self._open_evdev(ev_path)
-        if handed_off:
-          return
+      self._set_phase(_PHASE_CONNECTING)
+      self._set_status("Connecting...", 0.2)
+      if self.ensure_hid_input(self._app_config.timing.hid_quick_wait_ms):
+        self._set_phase(_PHASE_READY)
+        handed_off = True
+        return
 
       self._set_status("BlueZ connect...", 0.6)
       result = self._pairing.connect_saved()
       print("--- bluetoothctl ---")
       print(result.output)
       self._set_status("Opening input...", 0.85)
-      handed_off = self._claim_hid()
+      handed_off = self.ensure_hid_input(self._app_config.timing.hid_wait_ms)
       if handed_off:
+        self._set_phase(_PHASE_READY)
         return
+      self._set_phase(_PHASE_FAILED)
       if not result.ok():
         self._set_status(result.error, 0.0)
 
     except OSError as io_error:
+      self._set_phase(_PHASE_FAILED)
       if io_error.errno in (errno.ENODEV, errno.ENOENT):
         self._set_status("Controller disconnected", 0.0)
       else:
@@ -240,6 +255,7 @@ class XboxInputService:
         print(io_error)
         traceback.print_exc()
     except Exception as runtime_error:
+      self._set_phase(_PHASE_FAILED)
       self._set_status(f"Erreur: {runtime_error}", 0.0)
       print(runtime_error)
       traceback.print_exc()
@@ -250,27 +266,22 @@ class XboxInputService:
           self.connected = False
           self.drive = None
           self.progress = 0.0
-          if self.status.startswith("Erreur") or self.status in (
-            "Connecting...",
-            "Pairing (hold SYNC)...",
-            "Pairing...",
-            "Waiting Xbox (agent on)...",
-            "Waiting Xbox input...",
-            "Bonding Xbox...",
-            "Opening input...",
-            "BlueZ connect...",
-          ):
+          # Abort mid-PAIR/CONNECT (stop / cancelled) → Ready; keep failure text.
+          if self._phase in (_PHASE_PAIRING, _PHASE_CONNECTING):
             self.status = "Ready"
+          self._phase = _PHASE_IDLE if self._phase != _PHASE_FAILED else _PHASE_FAILED
       if not handed_off:
         self._close_reader()
 
-  def _claim_hid(self):
-    """Wait for and open the Xbox evdev node without disconnecting it."""
+  def ensure_hid_input(self, timeout_ms):
+    """Find or wait for Xbox evdev, then open it (one policy for PAIR/CONNECT)."""
     if self._stop.is_set():
       return False
-    ev_path = self._wait_for_input(
-      timeout_ms=self._app_config.timing.hid_wait_ms,
-    )
+    ev_path = self._finder.find_xbox_event()
+    if ev_path and self._can_open(ev_path):
+      if self._open_evdev(ev_path):
+        return True
+    ev_path = self._wait_for_input(timeout_ms=timeout_ms)
     if ev_path and self._open_evdev(ev_path):
       return True
     self._set_status("Xbox input unavailable", 0.0)

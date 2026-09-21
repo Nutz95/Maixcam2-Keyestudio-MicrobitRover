@@ -20,7 +20,7 @@ def main():
   assert app_config.camera.display_fps == raw["camera"]["display_fps"]
   assert app_config.rover.send_interval_ms == raw["rover"]["send_interval_ms"]
   assert app_config.timing.teleop_poll_sleep_ms == raw["timing"]["teleop_poll_sleep_ms"]
-  assert app_config.timing.bt_settle_short_ms == raw["timing"]["bt_settle_short_ms"]
+  assert app_config.timing.bt_kernel_settle_ms == raw["timing"]["bt_kernel_settle_ms"]
   assert app_config.timing.evdev_drain_max_events == raw["timing"]["evdev_drain_max_events"]
   assert app_config.camera.display_interval_ms == max(1, 1000 // app_config.camera.display_fps)
   assert app_config.mapping.drive_forward == raw["mapping"]["axes"]["drive_forward"]
