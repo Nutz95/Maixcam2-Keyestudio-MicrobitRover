@@ -1,17 +1,22 @@
+import re
 import subprocess
 import threading
 import time
 
 
-class BluetoothctlRunner:
-  """Run bluetoothctl with delays and early exit on success."""
+BLUETOOTH_OK_MARKERS = (
+  "Connection successful",
+  "Connected: yes",
+  "Pairing successful",
+  "Already paired",
+  "Already Exists",
+)
 
-  _OK_MARKERS = (
-    "Connection successful",
-    "Connected: yes",
-    "Pairing successful",
-    "Already paired",
-  )
+
+class BluetoothctlRunner:
+  """Run bluetoothctl with delays and early exit on success (BlueZ on MaixCam Linux)."""
+
+  _MAC_RE = re.compile(r"([0-9A-F]{2}(?::[0-9A-F]{2}){5})", re.IGNORECASE)
 
   def _run_session(self, steps, watch_mac=None, hard_timeout=90):
     proc = subprocess.Popen(
@@ -45,7 +50,7 @@ class BluetoothctlRunner:
 
     def done():
       text = output()
-      return any(m in text for m in self._OK_MARKERS)
+      return any(m in text for m in BLUETOOTH_OK_MARKERS)
 
     def mac_seen():
       if not mac_key:
@@ -78,12 +83,48 @@ class BluetoothctlRunner:
       proc.kill()
     return output()
 
-  def remove(self, mac):
-    mac = mac.upper()
-    return self._run_session([
+  def scan_for_device_name(self, name, timeout_sec=15.0):
+    """BLE/classic scan via bluetoothctl; return MAC for exact or partial name match."""
+    target = name.lower().strip()
+    if not target:
+      return None
+
+    output = self._run_session([
       ("power on", 0.5),
-      (f"remove {mac}", 1.0),
-    ], watch_mac=mac, hard_timeout=15)
+      ("scan on", 0.3),
+      ("", timeout_sec),
+    ], hard_timeout=timeout_sec + 30)
+
+    exact = None
+    partial = None
+    pending_mac = None
+    for line in output.splitlines():
+      line = line.strip()
+      mac_match = self._MAC_RE.search(line)
+      if mac_match:
+        pending_mac = mac_match.group(1).upper()
+      name_match = re.search(r"Name:\s*(.+)$", line, re.IGNORECASE)
+      device_name = ""
+      if name_match:
+        device_name = name_match.group(1).strip()
+      elif pending_mac and line.startswith("Device ") and "Name:" not in line:
+        tail = line.split(pending_mac, 1)[-1].strip()
+        if tail and not tail.startswith("("):
+          device_name = tail
+
+      if not pending_mac or not device_name:
+        continue
+
+      print(f"  bt scan: {pending_mac} {device_name}")
+      dn = device_name.lower()
+      if dn == target:
+        exact = pending_mac
+        break
+      if target in dn:
+        partial = partial or pending_mac
+      pending_mac = None
+
+    return exact or partial
 
   def quick_connect(self, mac):
     mac = mac.upper()

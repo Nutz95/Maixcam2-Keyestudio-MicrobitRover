@@ -45,6 +45,19 @@ Split the problem the right way: **MaixCam handles vision + human input**, **mic
 | [`tools/`](tools/) | PowerShell + Python scripts to test from a PC |
 | [`microbit/PROTOCOL.md`](microbit/PROTOCOL.md) | Protocol index → [EN](microbit/PROTOCOL_EN.md) / [FR](microbit/PROTOCOL_FR.md) |
 
+### Documentation index
+
+| Document | Language | Topic |
+|----------|----------|-------|
+| [README.md](README.md) | English | Project overview (this file) |
+| [README_FR.md](README_FR.md) | French | Full guide, flash, wiring, troubleshooting |
+| [maixcam/roverMecanum/README.md](maixcam/roverMecanum/README.md) | — | App doc index |
+| [maixcam/roverMecanum/README_EN.md](maixcam/roverMecanum/README_EN.md) | English | Xbox mapping, deploy, camera HUD |
+| [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) | French | Same as EN |
+| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md) | French | Bluetooth / BlueZ on MaixCam2 |
+| [microbit/PROTOCOL_EN.md](microbit/PROTOCOL_EN.md) | English | UART binary protocol |
+| [microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md) | French | Same as EN |
+
 ### Firmware highlights
 
 - Dual serial: **edge UART (P1/P2)** for the MaixCam + **USB mbed** for PC debugging

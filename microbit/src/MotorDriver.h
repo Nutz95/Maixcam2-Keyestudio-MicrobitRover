@@ -17,8 +17,6 @@ public:
     void motor_lower_right(uint8_t forward, uint8_t speed);
 
     void stop();
-    // Registres 0x09/0x0A : LEDs RGB sous le chassis (pas les LEDs avant)
-    void set_under_rgb_leds(bool on);
 
     void move_forward(uint8_t speed);
     void move_backward(uint8_t speed);
@@ -37,6 +35,4 @@ public:
 
 private:
     static const uint8_t I2C_ADDRESS = 0x30;
-    static const uint8_t LED_LEFT_REG = 0x09;
-    static const uint8_t LED_RIGHT_REG = 0x0A;
 };

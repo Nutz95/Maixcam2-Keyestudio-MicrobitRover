@@ -2,12 +2,11 @@ import subprocess
 
 
 class BluetoothInstaller:
-  """Installe les dependances Bluetooth sur MaixCam2."""
+  """Enable Bluetooth on MaixCam2 (BlueZ via bluetoothctl)."""
 
   def install(self):
     results = []
     results.append(self._run_shell("bluetoothctl power on"))
-    results.append(self._run_shell("pip install bleak"))
     self._ensure_rc_local()
     return "\n".join(results)
 

@@ -25,16 +25,7 @@ int32_t max_i32(int32_t left, int32_t right) {
 }
 
 MecanumJoystickMapper::MecanumJoystickMapper(uint8_t deadzone_percent)
-    : _deadzone_percent(deadzone_percent) {
-    set_deadzone_percent(deadzone_percent);
-}
-
-void MecanumJoystickMapper::set_deadzone_percent(uint8_t deadzone_percent) {
-    _deadzone_percent = deadzone_percent > 95 ? 95 : deadzone_percent;
-}
-
-uint8_t MecanumJoystickMapper::deadzone_percent() const {
-    return _deadzone_percent;
+    : _deadzone_percent(deadzone_percent > 95 ? 95 : deadzone_percent) {
 }
 
 void MecanumJoystickMapper::drive(

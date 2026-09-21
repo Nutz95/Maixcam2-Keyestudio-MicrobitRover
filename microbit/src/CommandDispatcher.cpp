@@ -2,10 +2,6 @@
 #include "Protocol.h"
 
 namespace {
-void stop_command(MecanumCarDriver& car, uint8_t) {
-    car.stop();
-}
-
 constexpr CommandAction kCommandActions[] = {
     {CMD_FORWARD, "forward", &MecanumCarDriver::move_forward},
     {CMD_BACKWARD, "backward", &MecanumCarDriver::move_backward},
@@ -29,7 +25,7 @@ CommandDispatcher::CommandDispatcher(MecanumCarDriver& car)
 
 bool CommandDispatcher::execute(uint8_t command, uint8_t speed) {
     if (command == CMD_STOP || speed == 0) {
-        stop_command(_car, speed);
+        _car.stop();
         return command == CMD_STOP || speed == 0;
     }
 

@@ -1,13 +1,8 @@
-from lib.protocol_constants import CMD_STOP, PROTO_SYNC
+from lib.uart_protocol import build_preset_frame
 
 
 class PresetFrameBuilder:
-  """Construit les trames preset 4 octets."""
+  """Build 4-byte preset UART frames."""
 
   def build(self, cmd, speed):
-    speed = max(0, min(255, int(speed)))
-    frame = bytes([PROTO_SYNC, cmd, speed])
-    return frame + bytes([(PROTO_SYNC + cmd + speed) & 0xFF])
-
-  def build_stop(self):
-    return self.build(CMD_STOP, 0)
+    return build_preset_frame(cmd, speed)

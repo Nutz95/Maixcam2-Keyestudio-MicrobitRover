@@ -1,6 +1,6 @@
 import os
 
-from lib.evdev_constants import ABS_BRAKE, ABS_GAS, ABS_RX, ABS_RY, ABS_RZ, ABS_X, ABS_Y, ABS_Z
+from lib.evdev_constants import ABS_BRAKE, ABS_GAS, ABS_RX, ABS_RY, ABS_RZ, ABS_X, ABS_Y, ABS_Z, default_abs_range
 
 # Linux input subsystem ABS_* names for sysfs paths.
 _ABS_LINUX_NAMES = {
@@ -33,12 +33,6 @@ class EvdevSysfsReader:
 
   def read_vendor(self, event_path):
     return self.read_field(event_path, "id/vendor")
-
-  def read_absinfo(self, event_path, axis_code):
-    real = self.read_absinfo_real(event_path, axis_code)
-    if real is not None:
-      return real
-    return self.default_absinfo(axis_code)
 
   def read_absinfo_real(self, event_path, axis_code):
     for root in self._device_roots(event_path):
@@ -79,18 +73,6 @@ class EvdevSysfsReader:
       return int(text, 16)
     except ValueError:
       return 0
-
-  def default_absinfo(self, axis_code):
-    if axis_code in (ABS_Z, ABS_RZ, ABS_GAS, ABS_BRAKE):
-      return 0, 1023, 64
-    return 0, 65535, 4096
-
-  def abs_axis_exists(self, event_path, axis_code):
-    for root in self._device_roots(event_path):
-      for rel in (f"absinfo/{axis_code}", f"absinfo/{axis_code:02x}"):
-        if os.path.isdir(f"{root}/{rel}"):
-          return True
-    return False
 
   def _device_roots(self, event_path):
     base = os.path.basename(event_path)

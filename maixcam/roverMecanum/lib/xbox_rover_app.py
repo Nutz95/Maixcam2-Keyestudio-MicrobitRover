@@ -48,7 +48,6 @@ class XboxRoverApp:
     self._was_busy = False
     self._camera = None
     self._shutdown_done = False
-    self._was_driving = False
     rover_cfg = self._config.get("rover", {})
     self._config_max_speed = int(rover_cfg.get("max_speed", 255))
     self._session_max_speed = self._config_max_speed
@@ -82,7 +81,6 @@ class XboxRoverApp:
           send_ms = now
         elif was_connected and not connected:
           self._rover.send_stop()
-          self._was_driving = False
 
         was_connected = connected
         time.sleep_ms(1)
@@ -230,11 +228,9 @@ class XboxRoverApp:
   def _send_drive(self, drive):
     if drive.preset_cmd is not None:
       self._rover.send_preset(drive.preset_cmd)
-      self._was_driving = True
       return
     if drive.is_idle():
       self._rover.send_stop()
-      self._was_driving = False
       return
     self._rover.send_joystick(
       drive.axis_strafe,
@@ -242,7 +238,6 @@ class XboxRoverApp:
       drive.axis_spin,
       drive.axis_pivot,
     )
-    self._was_driving = True
 
   def _in_rect(self, x, y, rect):
     return rect[0] <= x < rect[0] + rect[2] and rect[1] <= y < rect[1] + rect[3]

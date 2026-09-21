@@ -27,6 +27,8 @@ Do not suggest moving BLE to micro:bit or motor control to MaixCam.
 
 Tags: `delete:`, `stdlib:`, `maixpy:`, `native:`, `yagni:`, `shrink:`, `dup:` (see ponytail-audit skill for definitions).
 
+`yagni:` does not apply to small single-caller modules that isolate a SOLID responsibility or keep classes under the project's size limit.
+
 ## Examples (this repo)
 
 ✅ `evdev_reader.py:L40: yagni: EvdevReaderFactory with one subclass. Inline until a second device type exists.`

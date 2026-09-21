@@ -15,7 +15,7 @@ static UartIncomingFrame rover_incoming_frame;
 
 void setup() {
     Serial.begin(115200);
-    rover_serial_begin(115200);
+    RoverSerial.begin(115200);
     delay(100);
 
     serial_usb_println("[rover] boot");

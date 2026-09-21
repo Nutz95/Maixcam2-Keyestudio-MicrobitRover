@@ -44,7 +44,6 @@ static const uint8_t WHEEL_DIR_STOP = 0x00;
 static const uint8_t WHEEL_DIR_FORWARD = 0x01;
 static const uint8_t WHEEL_DIR_BACKWARD = 0x02;
 
-static const uint8_t DEFAULT_SPEED = 100;
 static const uint8_t DEFAULT_JOYSTICK_DEADZONE_PERCENT = 2;
 
 static inline uint8_t proto_checksum(uint8_t b0, uint8_t b1, uint8_t b2) {

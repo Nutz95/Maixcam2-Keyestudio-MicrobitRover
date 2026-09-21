@@ -33,7 +33,7 @@ the micro:bit as a "simplification".
 ## Scan order
 
 1. `maixcam/roverMecanum/lib/` — most modules, highest merge/cut surface
-2. `maixcam/roverMecanum/main.py`, `config.json`, `config_defaults.py`
+2. `maixcam/roverMecanum/main.py`, `config.json`
 3. `maixcam/` root scripts (`maixcam_*.py`, `bluetooth_*.py`, `rover_uart.py`)
 4. `microbit/src/` — `.cpp` / `.h`
 5. `tools/` — `test_rover_menu.py`, `*.ps1`, `requirements.txt`
@@ -46,8 +46,9 @@ unless a doc duplicates logic that should live in one place.
 - `delete:` dead code, unused flexibility, speculative feature. Replacement: nothing.
 - `stdlib:` hand-rolled thing Python/C++ stdlib ships. Name the function. **MaixPy only:** flag only if the API exists on-device (see boundaries).
 - `maixpy:` custom wrapper around `maix.*` that only delegates. Name the built-in.
-- `native:` Linux kernel / BlueZ / evdev feature covers it; mbed/micro:bit API covers it on firmware.
+- `native:` Linux kernel / BlueZ / `bluetoothctl` / evdev feature covers it; mbed/micro:bit API covers it on firmware.
 - `yagni:` abstraction with one implementation, config key never set, layer with one caller.
+- **Not yagni:** small modules or files with a single caller when they isolate a SOLID responsibility or keep classes under the project's size limit — that split is intentional for readability (humans and coding agents).
 - `shrink:` same logic, fewer lines. Show the shorter form.
 - `dup:` same constants or framing logic duplicated across MaixCam Python and micro:bit C++ without a documented reason.
 
@@ -57,9 +58,9 @@ unless a doc duplicates logic that should live in one place.
 
 - Dependencies or patterns that assume full CPython stdlib on a PC — MaixPy is not desktop Python.
 - `evdev_*` modules that only forward to each other; candidates to inline or merge.
-- Config indirection (`config_store`, `config_defaults`, `paths`) deeper than needed for one JSON file.
+- Config indirection (`config_store`, `paths`) deeper than needed for one JSON file.
 - HUD/camera helpers that reimplement `maix.camera`, `maix.display`, or `maix.image` one-liners.
-- Bluetooth helpers that shell out when `bluetoothctl` / BlueZ already does the job in fewer lines.
+- Bluetooth helpers that shell out when `bluetoothctl` / BlueZ already does the job in fewer lines. **bleak is not used** — scan/pair/connect go through BlueZ only.
 - Standalone `maixcam/*.py` scripts superseded by `roverMecanum/` — check README and deploy script references before tagging `delete:`.
 
 **micro:bit (C++ / PlatformIO)**

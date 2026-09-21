@@ -8,7 +8,3 @@
 #define ROVER_RX_PIN 2
 
 extern Uart RoverSerial;
-
-inline void rover_serial_begin(unsigned long baud) {
-    RoverSerial.begin(baud);
-}

@@ -1,5 +1,6 @@
 from lib.axis_curve import apply_curve
 from lib.protocol_constants import PRESET_ACTIONS
+from lib.uart_protocol import dpad_axes_for_action
 
 
 class DriveOutput:
@@ -160,23 +161,7 @@ class ControllerMappingEngine:
     return self._action_to_axes(action)
 
   def _action_to_axes(self, action):
-    if action == "forward":
-      return 0, -32767
-    if action == "backward":
-      return 0, 32767
-    if action == "strafe_left":
-      return -32767, 0
-    if action == "strafe_right":
-      return 32767, 0
-    if action == "diag_fl":
-      return -32767, -32767
-    if action == "diag_fr":
-      return 32767, -32767
-    if action == "diag_bl":
-      return -32767, 32767
-    if action == "diag_br":
-      return 32767, 32767
-    return None
+    return dpad_axes_for_action(action)
 
   def _button_preset(self, state):
     buttons = self._config.get("mapping", {}).get("buttons", {})

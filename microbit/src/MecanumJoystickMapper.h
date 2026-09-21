@@ -7,9 +7,6 @@ class MecanumJoystickMapper {
 public:
     explicit MecanumJoystickMapper(uint8_t deadzone_percent);
 
-    void set_deadzone_percent(uint8_t deadzone_percent);
-    uint8_t deadzone_percent() const;
-
     void drive(
         MecanumCarDriver& car,
         int16_t axis_strafe,

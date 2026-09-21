@@ -10,10 +10,6 @@ class EvdevDeviceFinder:
   def __init__(self):
     self._sysfs = EvdevSysfsReader()
 
-  def find_js(self):
-    devices = sorted(glob.glob("/dev/input/js*"))
-    return devices[0] if devices else None
-
   def find_xbox_event(self):
     for path in sorted(glob.glob("/dev/input/event*")):
       if self._is_xbox(path):

@@ -1,7 +1,6 @@
 import json
 import os
 
-from lib.config_defaults import default_config
 from lib.paths import resolve_config_path
 
 
@@ -21,18 +20,18 @@ class ConfigStore:
     self._mtime = 0
 
   def load(self):
-    """Read config from disk; merge missing keys from defaults."""
+    """Read config from disk; merge missing keys from bundled config.json."""
     self.path = self._explicit_path or resolve_config_path()
     if not os.path.isfile(self.path):
-      print(f"config: no file at {self.path}, creating defaults")
-      self._data = default_config()
+      print(f"config: no file at {self.path}, creating from template")
+      self._data = self._load_template()
       self.save()
       self._mtime = os.path.getmtime(self.path)
       return self._data
 
     with open(self.path, "r") as f:
       self._data = json.load(f)
-    self._merge_defaults()
+    self._merge_template()
     self._mtime = os.path.getmtime(self.path)
     return self._data
 
@@ -80,14 +79,21 @@ class ConfigStore:
       "config:"
       f" path={self.path}"
       f" max_speed={rover.get('max_speed', 255)}"
-      f" deadzone={rover.get('deadzone_percent', 2)}%"
+      f" deadzone={rover.get('deadzone_percent', 5)}%"
       f" curve={rover.get('axis_curve', 'expo')}"
       f" sensitivity={rover.get('axis_sensitivity_percent', 100)}%"
       f" send_ms={rover.get('send_interval_ms', 30)}"
     )
 
-  def _merge_defaults(self):
-    base = default_config()
+  def _template_path(self):
+    return os.path.join(os.path.dirname(__file__), "..", "config.json")
+
+  def _load_template(self):
+    with open(self._template_path(), "r") as f:
+      return json.load(f)
+
+  def _merge_template(self):
+    base = self._load_template()
     changed = False
     for key, value in base.items():
       if key not in self._data:

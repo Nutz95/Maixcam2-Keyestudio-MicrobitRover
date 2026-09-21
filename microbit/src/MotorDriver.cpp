@@ -77,12 +77,6 @@ void MecanumCarDriver::stop() {
     set_all_pwm(0);
 }
 
-void MecanumCarDriver::set_under_rgb_leds(bool on) {
-    uint8_t value = on ? 1 : 0;
-    set_pwm(LED_LEFT_REG, value);
-    set_pwm(LED_RIGHT_REG, value);
-}
-
 void MecanumCarDriver::move_forward(uint8_t speed) {
     motor_upper_left(1, speed);
     motor_lower_left(1, speed);

@@ -144,10 +144,10 @@ public:
             case WAIT_JOYSTICK_CHECKSUM:
                 if (byte == joystick_frame_checksum(incoming)) {
                     _dispatcher.execute_joystick(
-                        decode_strafe_axis(incoming),
-                        decode_forward_axis(incoming),
-                        decode_spin_axis(incoming),
-                        decode_pivot_axis(incoming),
+                        decode_signed_axis(incoming.strafe_byte_low, incoming.strafe_byte_high),
+                        decode_signed_axis(incoming.forward_byte_low, incoming.forward_byte_high),
+                        decode_signed_axis(incoming.spin_byte_low, incoming.spin_byte_high),
+                        decode_signed_axis(incoming.pivot_byte_low, incoming.pivot_byte_high),
                         incoming.motor_speed);
                     send_ack(reply_port, CMD_JOYSTICK);
                     log_command(CMD_JOYSTICK, incoming.motor_speed, source);
@@ -186,21 +186,5 @@ private:
         return static_cast<int16_t>(
             static_cast<uint16_t>(byte_low) |
             (static_cast<uint16_t>(byte_high) << 8U));
-    }
-
-    int16_t decode_strafe_axis(const UartIncomingFrame& incoming) const {
-        return decode_signed_axis(incoming.strafe_byte_low, incoming.strafe_byte_high);
-    }
-
-    int16_t decode_forward_axis(const UartIncomingFrame& incoming) const {
-        return decode_signed_axis(incoming.forward_byte_low, incoming.forward_byte_high);
-    }
-
-    int16_t decode_spin_axis(const UartIncomingFrame& incoming) const {
-        return decode_signed_axis(incoming.spin_byte_low, incoming.spin_byte_high);
-    }
-
-    int16_t decode_pivot_axis(const UartIncomingFrame& incoming) const {
-        return decode_signed_axis(incoming.pivot_byte_low, incoming.pivot_byte_high);
     }
 };

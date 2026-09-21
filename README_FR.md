@@ -12,6 +12,16 @@
 
 Firmware PlatformIO (C++) pour piloter le **Keyestudio 4WD Mecanum Robot Car V2** (BBC micro:bit V2) via une liaison série binaire depuis un **MaixCam** (ou tout autre hôte UART).
 
+### Index documentation
+
+| Document | Langue | Sujet |
+|----------|--------|-------|
+| [README.md](README.md) | English | Vue d'ensemble |
+| [README_FR.md](README_FR.md) | Français | Guide complet (ce fichier) |
+| [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) | Français | App Xbox, mapping, déploiement |
+| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md) | Français | Bluetooth BlueZ sur MaixCam2 |
+| [microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md) | Français | Protocole UART binaire |
+
 ## Architecture
 
 ```
@@ -244,14 +254,21 @@ python tools/test_rover_menu.py -p COM12 -s 80
 
 **Via P1/P2** : adaptateur USB-serie ou MaixCam relie a P1/P2.
 
-## Test depuis MaixCam (UI tactile)
+## Test depuis MaixCam (app Xbox)
 
-Copier `maixcam/maixcam_test_rover.py` sur le MaixCam et lancer depuis MaixPy.
+Déployer et lancer l'application packagée :
 
-- Ecran 640x480 avec boutons pour chaque mouvement
-- Bouton retour (envoie STOP puis quitte)
-- Boutons vitesse + / -
-- UART maixcam2 : A21(TX) / A22(RX) vers micro:bit P2/P1
+```powershell
+.\tools\deploy_rover_mecanum.ps1 -DeployOnly -SyncConfig
+```
+
+Puis ouvrir `maixcam/roverMecanum` dans MaixVision et exécuter `main.py`.
+
+- Manette Xbox via Bluetooth (BlueZ + evdev)
+- Prévisualisation caméra + HUD sticks / vitesse
+- UART MaixCam2 : A21(TX) / A22(RX) vers micro:bit P2/P1
+
+Voir [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) et [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md).
 
 ### Debug USB (logs)
 

@@ -18,6 +18,20 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO_ROOT / "maixcam" / "roverMecanum" / "lib"))
+
+from uart_protocol import (  # noqa: E402
+  CMD_STOP,
+  DEFAULT_SPEED,
+  PRESET_COMMANDS,
+  PROTO_ACK,
+  build_joystick_frame,
+  build_preset_frame,
+  build_raw_frame,
+)
 
 try:
     import serial
@@ -26,44 +40,6 @@ except ImportError:
     print("Dependance manquante : pip install pyserial")
     sys.exit(1)
 
-PROTO_SYNC = 0xAA
-PROTO_ACK = 0x55
-
-CMD_STOP = 0x00
-CMD_FORWARD = 0x01
-CMD_BACKWARD = 0x02
-CMD_STRAFE_LEFT = 0x03
-CMD_STRAFE_RIGHT = 0x04
-CMD_DIAG_FL = 0x05
-CMD_DIAG_FR = 0x06
-CMD_DIAG_BL = 0x07
-CMD_DIAG_BR = 0x08
-CMD_SPIN_LEFT = 0x09
-CMD_SPIN_RIGHT = 0x0A
-CMD_PIVOT_RIGHT = 0x0B
-CMD_PIVOT_REAR = 0x0C
-CMD_RAW = 0x20
-CMD_JOYSTICK = 0x30
-
-WHEEL_FORWARD = 0x01
-WHEEL_BACKWARD = 0x02
-
-PRESET_COMMANDS: list[tuple[str, str, int]] = [
-    ("0", "STOP", CMD_STOP),
-    ("1", "Avant", CMD_FORWARD),
-    ("2", "Arriere", CMD_BACKWARD),
-    ("3", "Strafe gauche", CMD_STRAFE_LEFT),
-    ("4", "Strafe droite", CMD_STRAFE_RIGHT),
-    ("5", "Diag avant-gauche", CMD_DIAG_FL),
-    ("6", "Diag avant-droite", CMD_DIAG_FR),
-    ("7", "Diag arriere-gauche", CMD_DIAG_BL),
-    ("8", "Diag arriere-droite", CMD_DIAG_BR),
-    ("9", "Rotation gauche (CCW)", CMD_SPIN_LEFT),
-    ("a", "Rotation droite (CW)", CMD_SPIN_RIGHT),
-    ("b", "Pivot cote droit", CMD_PIVOT_RIGHT),
-    ("c", "Pivot axe arriere", CMD_PIVOT_REAR),
-]
-
 RAW_PRESETS: list[tuple[str, str, int]] = [
     ("r1", "RAW: 4 roues avant", 0x55),
     ("r2", "RAW: 4 roues arriere", 0xAA),
@@ -71,46 +47,6 @@ RAW_PRESETS: list[tuple[str, str, int]] = [
     ("r4", "RAW: strafe gauche", 0x5A),
     ("r0", "RAW: tout stop", 0x00),
 ]
-
-
-def checksum3(b0: int, b1: int, b2: int) -> int:
-    return (b0 + b1 + b2) & 0xFF
-
-
-def checksum4(b0: int, b1: int, b2: int, b3: int) -> int:
-    return (b0 + b1 + b2 + b3) & 0xFF
-
-
-def build_preset_frame(cmd: int, speed: int) -> bytes:
-    return bytes([PROTO_SYNC, cmd, speed, checksum3(PROTO_SYNC, cmd, speed)])
-
-
-def build_raw_frame(wheel_dirs: int, speed: int) -> bytes:
-    return bytes(
-        [PROTO_SYNC, CMD_RAW, wheel_dirs, speed, checksum4(PROTO_SYNC, CMD_RAW, wheel_dirs, speed)]
-    )
-
-
-def build_joystick_frame(
-    axis_strafe: int,
-    axis_forward: int,
-    speed: int,
-    axis_spin: int = 0,
-    axis_pivot: int = 0,
-) -> bytes:
-    axis_strafe = max(-32768, min(32767, axis_strafe))
-    axis_forward = max(-32768, min(32767, axis_forward))
-    axis_spin = max(-32768, min(32767, axis_spin))
-    axis_pivot = max(-32768, min(32767, axis_pivot))
-    payload = (
-        axis_strafe.to_bytes(2, "little", signed=True)
-        + axis_forward.to_bytes(2, "little", signed=True)
-        + axis_spin.to_bytes(2, "little", signed=True)
-        + axis_pivot.to_bytes(2, "little", signed=True)
-        + bytes([speed])
-    )
-    frame = bytes([PROTO_SYNC, CMD_JOYSTICK]) + payload
-    return frame + bytes([sum(frame) & 0xFF])
 
 
 def list_serial_ports() -> list:
@@ -200,7 +136,7 @@ def print_help() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Menu de test du rover micro:bit")
     parser.add_argument("-p", "--port", help="Port serie (ex: COM12)")
-    parser.add_argument("-s", "--speed", type=int, default=100, help="Vitesse PWM 0-255")
+    parser.add_argument("-s", "--speed", type=int, default=DEFAULT_SPEED, help="Vitesse PWM 0-255")
     parser.add_argument("-b", "--baud", type=int, default=115200, help="Baudrate")
     args = parser.parse_args()
 

@@ -47,9 +47,3 @@ class ControllerState:
     clone.buttons = dict(self.buttons)
     clone.pressed_edge = dict(self.pressed_edge)
     return clone
-
-  def display_axis_x(self):
-    return self.left_x
-
-  def display_axis_y(self):
-    return self.left_y

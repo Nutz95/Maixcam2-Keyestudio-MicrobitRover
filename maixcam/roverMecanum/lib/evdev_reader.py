@@ -6,7 +6,7 @@ from lib.evdev_axis_mapper import EvdevAxisMapper, EvdevTriggerMapper
 from lib.evdev_constants import (
   ABS_HAT0X, ABS_HAT0Y, BTN_DPAD_DOWN, BTN_DPAD_LEFT, BTN_DPAD_RIGHT, BTN_DPAD_UP,
   BTN_NAME_BY_CODE, BTN_THUMBL, BTN_THUMBR, BTN_TL, BTN_TL2, BTN_TR, BTN_TR2,
-  EV_ABS, EV_KEY, EV_SYN, SYN_REPORT,
+  EV_ABS, EV_KEY, EV_SYN, SYN_REPORT, default_abs_range,
 )
 from lib.evdev_ioctl import read_absinfo
 from lib.evdev_sysfs_reader import EvdevSysfsReader
@@ -30,7 +30,6 @@ class EvdevReader:
     self._observed = {}
     self._file = None
     self.event_count = 0
-    self._abs_event_count = 0
     self._lt_btn = 0
     self._rt_btn = 0
     self._dpad_x = 0
@@ -51,7 +50,7 @@ class EvdevReader:
       if info is not None:
         raw = info[0]
       else:
-        min_v, max_v, flat = self._axis_range(code, code in trigger_codes)
+        min_v, max_v, flat = self._axis_range(code)
         raw = (min_v + max_v) // 2
       self._ensure_mapper(code, raw)
 
@@ -65,24 +64,7 @@ class EvdevReader:
 
   def drain_available(self):
     """Read every pending evdev event (non-blocking)."""
-    if self._file is None:
-      return 0
-    count = 0
-    while self._file is not None:
-      ready, _, _ = select.select([self._file], [], [], 0)
-      if not ready:
-        break
-      try:
-        data = self._file.read(self._ev_size)
-      except OSError as exc:
-        if exc.errno == 19:
-          raise
-        break
-      if not data or len(data) < self._ev_size:
-        break
-      self._process_event(data)
-      count += 1
-    return count
+    return self._drain_events()
 
   def poll_inputs(self):
     """
@@ -119,22 +101,15 @@ class EvdevReader:
       mapper = (
         EvdevTriggerMapper(min_v, max_v, flat)
         if prefer_trigger
-        else EvdevAxisMapper(min_v, max_v, flat, invert=False)
+        else EvdevAxisMapper(min_v, max_v, flat)
       )
       self._mappers[code] = mapper
     mapper.set_raw(raw)
 
-  def wait_and_poll(self, timeout_sec=0.05):
-    if self._file is None:
-      return False
-    fd = self._file.fileno()
-    ready, _, _ = select.select([fd], [], [], timeout_sec)
-    if not ready:
-      return False
-    return self._drain_events()
-
   def _drain_events(self):
-    got = False
+    if self._file is None:
+      return 0
+    count = 0
     while self._file is not None:
       ready, _, _ = select.select([self._file], [], [], 0)
       if not ready:
@@ -148,29 +123,24 @@ class EvdevReader:
       if not data or len(data) < self._ev_size:
         break
       self._process_event(data)
-      got = True
-    return got
+      count += 1
+    return count
 
   def _process_event(self, data):
     _sec, _usec, ev_type, code, value = self._ev_struct.unpack(data)
     self.event_count += 1
     if ev_type == EV_ABS:
-      self._abs_event_count += 1
-      if self._abs_event_count <= 6:
-        print(f"evdev abs code={code} raw={value}")
       self._feed_abs(code, value)
     elif ev_type == EV_KEY:
       self._feed_key(code, value)
     elif ev_type == EV_SYN and code == SYN_REPORT:
       pass
 
-  def _axis_range(self, code, as_trigger):
+  def _axis_range(self, code):
     info = self._sysfs.read_absinfo_real(self.event_path, code)
     if info is not None:
       return info
-    if as_trigger:
-      return 0, 1023, 64
-    return 0, 65535, 4096
+    return default_abs_range(code)
 
   def _create_mapper(self, code, prefer_trigger):
     min_v, max_v, flat = self._axis_range(code, prefer_trigger)
@@ -178,7 +148,7 @@ class EvdevReader:
       prefer_trigger = False
     if prefer_trigger:
       return EvdevTriggerMapper(min_v, max_v, flat)
-    return EvdevAxisMapper(min_v, max_v, flat, invert=False)
+    return EvdevAxisMapper(min_v, max_v, flat)
 
   def _ensure_mapper(self, code, value):
     obs = self._observed.get(code)
@@ -203,7 +173,6 @@ class EvdevReader:
 
     mapper = self._create_mapper(code, prefer_trigger)
     self._mappers[code] = mapper
-    print(f"evdev: mapper axis {code} trigger={prefer_trigger} seen={obs['min']}..{obs['max']}")
     return mapper
 
   def _feed_abs(self, code, value):
@@ -293,14 +262,11 @@ class EvdevReader:
     best_score = -1
     for st, size in candidates:
       score = self._score_event_chunk(chunk, st, size)
-      print(f"evdev: candidate {size}-byte score={score}")
       if score > best_score:
         best_score = score
         best = (st, size)
 
-    st, size = best
-    print(f"evdev: using {size}-byte events (score={best_score})")
-    return st, size
+    return best
 
   def _score_event_chunk(self, chunk, st, size):
     score = 0
