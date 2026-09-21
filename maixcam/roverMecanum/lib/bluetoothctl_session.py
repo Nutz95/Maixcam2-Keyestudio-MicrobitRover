@@ -6,18 +6,23 @@ import subprocess
 import threading
 import time
 
+from lib.app_config.timing_settings import TimingSettings
 from lib.bluetoothctl_runner import BluetoothctlRunner
 
 
 class BluetoothctlSession:
   """One bluetoothctl process for the whole app (agent NoInputNoOutput)."""
 
-  def __init__(self):
+  def __init__(self, timing=None):
+    self._timing = timing if timing is not None else TimingSettings({})
     self._lock = threading.Lock()
     self._chunks = []
     self._master = None
     self._proc = None
     self._alive = False
+
+  def _sleep_ms(self, ms: int) -> None:
+    time.sleep(self._timing.sleep_s(ms))
 
   def start(self):
     """Power on, pairable, register agent; keep the process running."""
@@ -37,12 +42,13 @@ class BluetoothctlSession:
     self._master = master
     self._alive = True
     threading.Thread(target=self._read_loop, daemon=True, name="btctl-pty").start()
-    time.sleep(0.4)
+    # BlueZ needs a short settle after PTY open before commands stick.
+    self._sleep_ms(self._timing.bt_settle_short_ms)
     self.send("power on")
     self.send("pairable on")
     self.send("agent NoInputNoOutput")
     self.send("default-agent")
-    time.sleep(0.4)
+    self._sleep_ms(self._timing.bt_settle_short_ms)
     print("bt: agent alive (NoInputNoOutput)")
 
   def close(self):
@@ -52,19 +58,20 @@ class BluetoothctlSession:
     self._alive = False
     try:
       self.send("quit")
-    except OSError:
-      pass
+    except OSError as io_error:
+      print(f"bt: quit write failed: {io_error}")
     if self._proc is not None:
       try:
         self._proc.wait(timeout=3)
       except subprocess.TimeoutExpired:
+        print("bt: bluetoothctl did not exit; killing")
         self._proc.kill()
       self._proc = None
     if self._master is not None:
       try:
         os.close(self._master)
-      except OSError:
-        pass
+      except OSError as io_error:
+        print(f"bt: PTY close failed: {io_error}")
       self._master = None
 
   def send(self, cmd):
@@ -80,14 +87,16 @@ class BluetoothctlSession:
     mac = mac.upper()
     print("bt: PAIR = remove old bond + encrypted re-pair (hold SYNC)")
     self._remove_bond(mac)
-    time.sleep(2.0)
+    # After remove, kernel/BlueZ needs settle before a new LE pair sticks.
+    self._sleep_ms(self._timing.bt_settle_long_ms)
 
     pair_out = ""
     seen = ""
+    pair_timeout = float(self._timing.bt_pair_timeout_s)
     for attempt in range(2):
       mark = self._mark()
       self.send("scan on")
-      seen = self._wait_pairing_ready(mac, mark, 25.0)
+      seen = self._wait_pairing_ready(mac, mark, pair_timeout)
       if not seen:
         self.send("scan off")
         print(f"bt: pair attempt {attempt + 1}/2 — not in SYNC mode")
@@ -98,7 +107,7 @@ class BluetoothctlSession:
       pair_out = self._wait_since(
         pair_mark,
         ("Pairing successful", "Already paired", "Failed to pair"),
-        25.0,
+        pair_timeout,
       )
       if BluetoothctlRunner.pair_succeeded(pair_out):
         break
@@ -106,14 +115,14 @@ class BluetoothctlSession:
       self.send("scan off")
       if attempt == 0:
         self._remove_device(mac)
-        time.sleep(2.0)
+        self._sleep_ms(self._timing.bt_settle_long_ms)
 
     self.send("scan off")
     if not BluetoothctlRunner.pair_succeeded(pair_out):
       return seen + pair_out
 
     self.send(f"trust {mac}")
-    time.sleep(0.5)
+    self._sleep_ms(self._timing.bt_settle_medium_ms)
     return seen + pair_out + self.info(mac)
 
   def connect(self, mac):
@@ -126,11 +135,11 @@ class BluetoothctlSession:
     out = self._wait_since(
       mark,
       ("Connection successful", "Failed to connect", "Paired: no"),
-      12.0,
+      float(self._timing.bt_connect_timeout_s),
     )
     if "Failed to connect" in out or "Paired: no" in out:
       self.send(f"info {mac}")
-      time.sleep(0.4)
+      self._sleep_ms(self._timing.bt_settle_short_ms)
       return self._since(mark)
     self._wait_hid_ready(mac)
     return self._since(mark)
@@ -140,7 +149,7 @@ class BluetoothctlSession:
     self.start()
     mark = self._mark()
     self.send(f"info {mac}")
-    time.sleep(0.5)
+    self._sleep_ms(self._timing.bt_settle_medium_ms)
     return BluetoothctlRunner.strip_ansi(self._since(mark))
 
   def _remove_bond(self, mac):
@@ -150,25 +159,30 @@ class BluetoothctlSession:
     self._wait_since(
       mark0,
       ("Device has been removed", "not available", "Failed to disconnect"),
-      8.0,
+      float(self._timing.bt_remove_timeout_s),
     )
 
   def _remove_device(self, mac):
     """Clear a failed temporary device object before the second pair attempt."""
     mark = self._mark()
     self.send(f"remove {mac}")
-    self._wait_since(mark, ("Device has been removed", "not available"), 8.0)
+    self._wait_since(
+      mark,
+      ("Device has been removed", "not available"),
+      float(self._timing.bt_remove_timeout_s),
+    )
 
   def _wait_pairing_ready(self, mac, mark, timeout_s):
     """Wait until Xbox is advertising for pairing (not a stale RSSI CHG)."""
     deadline = time.time() + timeout_s
     mac_u = mac.upper()
+    poll_s = self._timing.sleep_s(self._timing.bt_poll_ms)
     while time.time() < deadline:
       chunk = BluetoothctlRunner.strip_ansi(self._since(mark))
       if BluetoothctlRunner.xbox_pairing_advertisement(chunk, mac_u):
         print(f"bt: pairing advert seen for {mac_u}")
         return chunk
-      time.sleep(0.15)
+      time.sleep(poll_s)
     return ""
 
   def _wait_hid_ready(self, mac):
@@ -178,7 +192,7 @@ class BluetoothctlSession:
     self._wait_since(
       mark,
       ("ServicesResolved: yes", "00001812-", "Human Interface Device"),
-      12.0,
+      float(self._timing.bt_connect_timeout_s),
     )
 
   def scan_for_device_name(self, name, timeout_sec=20.0, aliases=None):
@@ -202,6 +216,7 @@ class BluetoothctlSession:
     deadline = time.time() + max(3.0, float(timeout_sec))
     next_devices = time.time() + 3.0
     mac = ""
+    poll_s = self._timing.sleep_s(self._timing.bt_scan_poll_ms)
     while time.time() < deadline:
       chunk = self._since(mark)
       exact, partial, _seen = runner._match_scan_output(chunk, targets)
@@ -214,16 +229,16 @@ class BluetoothctlSession:
         if mac:
           break
         next_devices = time.time() + 3.0
-      time.sleep(0.2)
+      time.sleep(poll_s)
     self.send("scan off")
-    time.sleep(0.2)
+    self._sleep_ms(self._timing.bt_scan_poll_ms)
     return mac
 
   def _mac_from_devices(self, runner, targets):
     """Parse ``devices`` output for an Xbox name match."""
     mark = self._mark()
     self.send("devices")
-    time.sleep(0.6)
+    self._sleep_ms(self._timing.bt_devices_query_ms)
     exact, partial, _seen = runner._match_scan_output(self._since(mark), targets)
     return exact or partial or ""
 
@@ -234,7 +249,8 @@ class BluetoothctlSession:
         continue
       try:
         data = os.read(self._master, 8192)
-      except OSError:
+      except OSError as io_error:
+        print(f"bt: PTY read ended: {io_error}")
         break
       if not data:
         break
@@ -266,10 +282,11 @@ class BluetoothctlSession:
 
   def _wait_since(self, mark, needles, timeout_s):
     deadline = time.time() + timeout_s
+    poll_s = self._timing.sleep_s(self._timing.bt_poll_ms)
     while time.time() < deadline:
       chunk = BluetoothctlRunner.strip_ansi(self._since(mark))
       for needle in needles:
         if needle in chunk:
           return chunk
-      time.sleep(0.1)
+      time.sleep(poll_s)
     return BluetoothctlRunner.strip_ansi(self._since(mark))

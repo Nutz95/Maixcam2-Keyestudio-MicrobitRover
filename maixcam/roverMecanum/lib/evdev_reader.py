@@ -3,7 +3,8 @@ import select
 import struct
 
 from lib.controller_state import ControllerState
-from lib.evdev_axis_mapper import EvdevAxisMapper, EvdevTriggerMapper
+from lib.evdev_axis_mapper import EvdevAxisMapper
+from lib.evdev_trigger_mapper import EvdevTriggerMapper
 from lib.evdev_constants import (
   ABS_HAT0X, ABS_HAT0Y, BTN_DPAD_DOWN, BTN_DPAD_LEFT, BTN_DPAD_RIGHT, BTN_DPAD_UP,
   BTN_NAME_BY_CODE, BTN_THUMBL, BTN_THUMBR, BTN_TL, BTN_TL2, BTN_TR, BTN_TR2,
@@ -24,14 +25,19 @@ class EvdevReader:
     self._config = config or {}
     self.state = ControllerState()
     self._sysfs = EvdevSysfsReader()
-    evdev_cfg = self._config.get("evdev", {})
-    self._layout = XboxAxisLayout.detect(self._sysfs, event_path, evdev_cfg)
+    evdev_config = self._config.get("evdev", {})
+    self._layout = XboxAxisLayout.detect(self._sysfs, event_path, evdev_config)
     self._ev_struct, self._ev_size = self._detect_event_size(event_path)
     self._mappers = {}
     self._observed = {}
     self._file = None
     self.event_count = 0
     self.kernel_state_available = False
+    timing = (config or {}).get("timing", {})
+    try:
+      self._drain_max = max(1, int(timing.get("evdev_drain_max_events", 24)))
+    except (TypeError, ValueError):
+      self._drain_max = 24
     self._lt_btn = 0
     self._rt_btn = 0
     self._dpad_x = 0
@@ -65,8 +71,8 @@ class EvdevReader:
     if self._file is not None:
       try:
         self._file.close()
-      except OSError:
-        pass
+      except OSError as io_error:
+        print(f"evdev: close failed: {io_error}")
       self._file = None
 
   def drain_available(self):
@@ -121,12 +127,14 @@ class EvdevReader:
     mapper.set_raw(raw)
 
   def _drain_events(self):
-    # Cap: a moving stick streams ABS forever. Draining until empty holds the GIL
-    # and the HUD (Python draw) falls seconds behind the motors.
+    # Cap ABS flood: a moving stick streams events forever. Emptying the queue
+    # without a limit holds the GIL and the HUD falls seconds behind the motors.
+    # Limit comes from config timing.evdev_drain_max_events (default 24 ≈ a few
+    # full stick reports; EVIOCGABS then supplies the live axis truth).
     if self._file is None:
       return 0
     count = 0
-    while count < 24 and self._file is not None:
+    while count < self._drain_max and self._file is not None:
       ready, _, _ = select.select([self._file], [], [], 0)
       if not ready:
         break
@@ -278,8 +286,8 @@ class EvdevReader:
           chunk = os.read(fd, 256)
       finally:
         os.close(fd)
-    except OSError:
-      pass
+    except OSError as io_error:
+      print(f"evdev: event-size probe failed: {io_error}")
 
     best = candidates[0]
     best_score = -1

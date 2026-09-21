@@ -16,7 +16,8 @@ Firmware PlatformIO (C++) pour piloter le **Keyestudio 4WD Mecanum Robot Car V2*
 | [README.md](README.md)                                                 | English  | Vue d'ensemble                 |
 | [README_FR.md](README_FR.md)                                           | Français | Guide complet (ce fichier)     |
 | [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) | Français | App Xbox, mapping, déploiement |
-| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md)             | Français | Bluetooth BlueZ sur MaixCam2   |
+| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md)             | English  | Bluetooth BlueZ + ERTM                     |
+| [maixcam/bluetooth_Readme_FR.md](maixcam/bluetooth_Readme_FR.md)       | Français | Bluetooth BlueZ sur MaixCam2               |
 | [microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md)                     | Français | Protocole UART binaire         |
 
 
@@ -311,7 +312,7 @@ Une fois l'app **packagée** et lancée en autonome sur la MaixCam2, le HUD
 redevient fluide. Valider la fluidité IHM sur l'app installée, pas seulement
 depuis MaixVision.
 
-Voir [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) et [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md).
+Voir [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) et [maixcam/bluetooth_Readme_FR.md](maixcam/bluetooth_Readme_FR.md).
 
 ### Debug USB (logs)
 
@@ -338,6 +339,19 @@ pio run -t upload
 ```
 
 
+
+### Lancer les tests sur le PC
+
+Depuis la racine du dépôt :
+
+```powershell
+python tools/check_code_guardrails.py
+python tools/test_app_config.py
+python -m unittest discover -s tools -p "test_*.py"
+```
+
+`tools/test_rover_menu.py` est un test matériel interactif, non inclus dans la
+suite automatisée. Il nécessite un port série micro:bit connecté.
 
 ## Pilotage Xbox / Bluetooth
 

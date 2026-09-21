@@ -90,11 +90,12 @@ class ConfigStore:
         json.dump(self._data, handle, indent=2)
         handle.write("\n")
       os.replace(tmp_path, self.path)
-    except Exception:
+    except Exception as save_error:
+      print(f"config: atomic save failed: {save_error}")
       try:
         os.unlink(tmp_path)
-      except OSError:
-        pass
+      except OSError as unlink_error:
+        print(f"config: temp cleanup failed: {unlink_error}")
       raise
     if os.path.isfile(self.path):
       self._mtime = os.path.getmtime(self.path)

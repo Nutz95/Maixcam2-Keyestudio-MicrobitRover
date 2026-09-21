@@ -131,8 +131,8 @@ class XboxRoverApp:
     self._xbox.close()
     try:
       self._rover.send_stop()
-    except Exception:
-      pass
+    except Exception as stop_error:
+      print(f"app: send_stop on shutdown failed: {stop_error}")
     if self._camera is not None:
       self._camera.stop()
       self._camera = None
@@ -175,13 +175,15 @@ class XboxRoverApp:
   def _drawable_rgb(frame):
     try:
       fmt = frame.format()
-    except Exception:
+    except Exception as format_error:
+      print(f"hud: frame.format failed: {format_error}")
       return frame
     if fmt in (image.Format.FMT_RGB888, image.Format.FMT_BGR888):
       return frame
     try:
       return frame.to_format(image.Format.FMT_RGB888)
-    except Exception:
+    except Exception as convert_error:
+      print(f"hud: RGB convert failed: {convert_error}")
       return frame
 
   def _read_touch(self):

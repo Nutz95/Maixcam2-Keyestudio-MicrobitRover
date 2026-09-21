@@ -1,31 +1,43 @@
 id: mecanum_rover_controler
 name: Mecanum_Rover_Controler
-version: 1.0.1
+version: 1.0.2
 author: Nutz95
 icon: app.png
 desc: Mecanum rover controler (Keyestudio microbit rover!). Supports Xbox controler
 files:
+  - lib\app_config\__init__.py
+  - lib\app_config\app_config.py
+  - lib\app_config\camera_settings.py
+  - lib\app_config\parse_helpers.py
+  - lib\app_config\rover_settings.py
+  - lib\app_config\timing_settings.py
   - lib\__init__.py
   - lib\axis_curve.py
+  - lib\bluetooth_command_result.py
   - lib\bluetooth_installer.py
   - lib\bluetooth_pairing_service.py
   - lib\bluetoothctl_runner.py
+  - lib\bluetoothctl_session.py
   - lib\camera_preview_service.py
   - lib\config_store.py
   - lib\controller_mapping_engine.py
+  - lib\controller_scan_result.py
   - lib\controller_state.py
+  - lib\drive_output.py
   - lib\evdev_axis_mapper.py
   - lib\evdev_constants.py
   - lib\evdev_device_finder.py
   - lib\evdev_ioctl.py
   - lib\evdev_reader.py
   - lib\evdev_sysfs_reader.py
+  - lib\evdev_trigger_mapper.py
   - lib\evdev_xbox_layout.py
   - lib\joystick_frame_builder.py
   - lib\paths.py
   - lib\preset_frame_builder.py
   - lib\protocol_constants.py
   - lib\rover_uart_client.py
+  - lib\teleop_control_thread.py
   - lib\uart_initializer.py
   - lib\uart_protocol.py
   - lib\ui_drawer.py

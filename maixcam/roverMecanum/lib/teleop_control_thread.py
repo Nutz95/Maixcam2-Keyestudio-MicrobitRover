@@ -54,8 +54,8 @@ class TeleopControlThread:
       elif was_connected and not connected:
         try:
           self._rover.send_stop()
-        except Exception:
-          pass
+        except Exception as stop_error:
+          print(f"teleop: send_stop failed: {stop_error}")
       was_connected = connected
       # Event.wait releases the GIL; timeout comes from config timing.teleop_poll_sleep_ms.
       self._stop.wait(timeout=self._poll_sleep_ms / 1000.0)

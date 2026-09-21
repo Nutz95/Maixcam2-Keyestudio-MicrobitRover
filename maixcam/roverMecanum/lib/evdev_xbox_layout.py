@@ -16,26 +16,26 @@ class XboxAxisLayout:
     self.rt = rt
 
   @classmethod
-  def detect(cls, sysfs, event_path, evdev_cfg=None):
-    evdev_cfg = evdev_cfg or {}
-    if cls._has_explicit_codes(evdev_cfg):
+  def detect(cls, sysfs, event_path, evdev_config=None):
+    evdev_config = evdev_config or {}
+    if cls._has_explicit_codes(evdev_config):
       layout = cls(
-        int(evdev_cfg["left_x"]),
-        int(evdev_cfg["left_y"]),
-        int(evdev_cfg["right_x"]),
-        int(evdev_cfg["right_y"]),
-        int(evdev_cfg["lt"]),
-        int(evdev_cfg["rt"]),
+        int(evdev_config["left_x"]),
+        int(evdev_config["left_y"]),
+        int(evdev_config["right_x"]),
+        int(evdev_config["right_y"]),
+        int(evdev_config["lt"]),
+        int(evdev_config["rt"]),
       )
       cls._log_layout(layout, "config")
       return layout
 
-    profile = evdev_cfg.get("layout", "auto")
-    if profile == "standard":
+    layout_profile = evdev_config.get("layout", "auto")
+    if layout_profile == "standard":
       layout = cls(ABS_X, ABS_Y, ABS_RX, ABS_RY, ABS_Z, ABS_RZ)
       cls._log_layout(layout, "standard")
       return layout
-    if profile == "maixcam_bt":
+    if layout_profile == "maixcam_bt":
       layout = cls(ABS_X, ABS_Y, ABS_Z, ABS_RZ, ABS_BRAKE, ABS_GAS)
       cls._log_layout(layout, "maixcam_bt")
       return layout
@@ -97,9 +97,9 @@ class XboxAxisLayout:
     return ABS_Z, ABS_RZ
 
   @staticmethod
-  def _has_explicit_codes(evdev_cfg):
+  def _has_explicit_codes(evdev_config):
     keys = ("left_x", "left_y", "right_x", "right_y", "lt", "rt")
-    return all(k in evdev_cfg for k in keys)
+    return all(key in evdev_config for key in keys)
 
   @staticmethod
   def _is_trigger_range(min_v, max_v):

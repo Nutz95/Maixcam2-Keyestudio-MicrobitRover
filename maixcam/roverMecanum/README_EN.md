@@ -11,7 +11,8 @@ already respond — the IDE bridge holds the Python GIL. Packaged app on-device
 is fluid; judge IHM smoothness on the installed app, not MaixVision alone.
 
 Settings are deserialized into typed `AppConfig` (`settings().camera.display_fps`);
-loop sleeps live under `timing` in `config.json`.
+loop sleeps live under `timing` in `config.json`. Bluetooth notes (ERTM):
+[`../bluetooth_Readme.md`](../bluetooth_Readme.md).
 
 ---
 

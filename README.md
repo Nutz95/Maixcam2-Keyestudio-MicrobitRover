@@ -57,7 +57,8 @@ Split the problem the right way: **MaixCam handles vision + human input**, **mic
 | [maixcam/roverMecanum/README.md](maixcam/roverMecanum/README.md)       | —        | App doc index                              |
 | [maixcam/roverMecanum/README_EN.md](maixcam/roverMecanum/README_EN.md) | English  | Xbox mapping, deploy, camera HUD           |
 | [maixcam/roverMecanum/README_FR.md](maixcam/roverMecanum/README_FR.md) | French   | Same as EN                                 |
-| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md)             | French   | Bluetooth / BlueZ on MaixCam2              |
+| [maixcam/bluetooth_Readme.md](maixcam/bluetooth_Readme.md)             | English  | Bluetooth / BlueZ on MaixCam2 (incl. ERTM) |
+| [maixcam/bluetooth_Readme_FR.md](maixcam/bluetooth_Readme_FR.md)       | French   | Same as EN                                 |
 | [microbit/PROTOCOL_EN.md](microbit/PROTOCOL_EN.md)                     | English  | UART binary protocol                       |
 | [microbit/PROTOCOL_FR.md](microbit/PROTOCOL_FR.md)                     | French   | Same as EN                                 |
 
@@ -126,6 +127,19 @@ Open `maixcam/roverMecanum` in MaixVision and run `main.py`.
 HUD lag under MaixVision (USB debug) with responsive motors is expected — the IDE
 bridge holds the Python GIL. Judging display fluidity on the **packaged** app.
 
+## Host-side tests
+
+Run these commands from the repository root:
+
+```powershell
+python tools/check_code_guardrails.py
+python tools/test_app_config.py
+python -m unittest discover -s tools -p "test_*.py"
+```
+
+The interactive `tools/test_rover_menu.py` is a hardware test and is not part
+of the automated unit-test suite. It requires a connected micro:bit serial port.
+
 ---
 
 
@@ -163,7 +177,7 @@ The firmware mixes all four axes into per-wheel speeds — you can combine forwa
 | GND            | GND            |
 
 
-> TX → RX (croisé). Si A21 va sur P1 et A22 sur P2, la com ne marche pas.
+> TX → RX (crossed). If A21 goes to P1 and A22 to P2, UART will not work.
 
 Motor board stays on the Keyestudio harness (I2C `0x30`, PWM channels 1–8).
 

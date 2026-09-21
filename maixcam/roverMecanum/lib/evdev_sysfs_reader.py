@@ -1,6 +1,6 @@
 import os
 
-from lib.evdev_constants import ABS_BRAKE, ABS_GAS, ABS_RX, ABS_RY, ABS_RZ, ABS_X, ABS_Y, ABS_Z, default_abs_range
+from lib.evdev_constants import ABS_BRAKE, ABS_GAS, ABS_RX, ABS_RY, ABS_RZ, ABS_X, ABS_Y, ABS_Z
 
 # Linux input subsystem ABS_* names for sysfs paths.
 _ABS_LINUX_NAMES = {
@@ -18,14 +18,26 @@ _ABS_LINUX_NAMES = {
 class EvdevSysfsReader:
   """Read /sys/class/input metadata for evdev devices."""
 
+  def __init__(self):
+    self._reported_probe_errors = set()
+
+  def _report_probe_error(self, operation, path, error):
+    """Log each optional sysfs probe failure once without flooding the HUD."""
+    key = (operation, path, type(error).__name__)
+    if key in self._reported_probe_errors:
+      return
+    self._reported_probe_errors.add(key)
+    print(f"evdev sysfs: {operation} failed for {path}: {error}")
+
   def read_field(self, event_path, field):
     for root in self._device_roots(event_path):
       path = f"{root}/{field}"
       try:
-        with open(path, "r") as f:
-          return f.read().strip()
-      except OSError:
-        pass
+        with open(path, "r") as handle:
+          return handle.read().strip()
+      except OSError as error:
+        self._report_probe_error("read field", path, error)
+        continue
     return ""
 
   def read_name(self, event_path):
@@ -37,13 +49,15 @@ class EvdevSysfsReader:
   def read_absinfo_real(self, event_path, axis_code):
     for root in self._device_roots(event_path):
       for rel in (f"absinfo/{axis_code}", f"absinfo/{axis_code:02x}"):
+        path = f"{root}/{rel}"
         try:
-          min_v = int(self._read_text(f"{root}/{rel}/min"))
-          max_v = int(self._read_text(f"{root}/{rel}/max"))
-          flat = int(self._read_text(f"{root}/{rel}/flat"))
+          min_v = int(self._read_text(f"{path}/min"))
+          max_v = int(self._read_text(f"{path}/max"))
+          flat = int(self._read_text(f"{path}/flat"))
           return min_v, max_v, flat
-        except (OSError, ValueError):
-          pass
+        except (OSError, ValueError) as error:
+          self._report_probe_error("read absinfo", path, error)
+          continue
     return None
 
   def read_abs_value(self, event_path, axis_code):
@@ -59,10 +73,12 @@ class EvdevSysfsReader:
       if name:
         rels.extend([f"abs/ABS_{name.upper()}/value", f"abs/{name}/value"])
       for rel in rels:
+        path = f"{root}/{rel}"
         try:
-          return int(self._read_text(f"{root}/{rel}"))
-        except (OSError, ValueError):
-          pass
+          return int(self._read_text(path))
+        except (OSError, ValueError) as error:
+          self._report_probe_error("read abs value", path, error)
+          continue
     return None
 
   def read_abs_capabilities(self, event_path):
@@ -71,7 +87,8 @@ class EvdevSysfsReader:
       return 0
     try:
       return int(text, 16)
-    except ValueError:
+    except ValueError as error:
+      self._report_probe_error("parse abs capabilities", event_path, error)
       return 0
 
   def _device_roots(self, event_path):
@@ -87,10 +104,10 @@ class EvdevSysfsReader:
     add(f"/sys/class/input/{base}/device")
     try:
       add(os.path.realpath(f"/sys/class/input/{base}/device"))
-    except OSError:
-      pass
+    except OSError as io_error:
+      print(f"evdev sysfs: realpath skip for {base}: {io_error}")
     return roots
 
   def _read_text(self, path):
-    with open(path, "r") as f:
-      return f.read().strip()
+    with open(path, "r") as handle:
+      return handle.read().strip()

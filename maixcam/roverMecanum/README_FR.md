@@ -4,7 +4,7 @@ Installation sur la caméra : `/root/roverMecanum/`
 
 **Avant le premier PAIR :** mettre à jour le firmware de la manette Xbox via
 **Windows → Xbox Accessories** (Microsoft Store). Sans ça, logo qui clignote +
-boucle `Connected: yes/no` sur le noyau 4.19. Détails : [`../bluetooth_Readme.md`](../bluetooth_Readme.md).
+boucle `Connected: yes/no` sur le noyau 4.19. Détails : [`../bluetooth_Readme_FR.md`](../bluetooth_Readme_FR.md).
 
 Déploiement Windows : `tools/deploy_rover_mecanum.ps1`  
 Pour pousser **config.json** du repo vers la caméra : `.\deploy_rover_mecanum.ps1 -SyncConfig`

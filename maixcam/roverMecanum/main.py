@@ -51,6 +51,6 @@ if __name__ == "__main__":
       disp.show(img)
       while not app.need_exit():
         time.sleep_ms(100)
-    except Exception:
-      pass
+    except Exception as display_error:
+      print(f"fatal: could not show error on display: {display_error}")
     gc.collect()

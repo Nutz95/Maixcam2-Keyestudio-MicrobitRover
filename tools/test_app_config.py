@@ -18,6 +18,8 @@ def main():
   assert cfg.camera.display_fps == raw["camera"]["display_fps"]
   assert cfg.rover.send_interval_ms == raw["rover"]["send_interval_ms"]
   assert cfg.timing.teleop_poll_sleep_ms == raw["timing"]["teleop_poll_sleep_ms"]
+  assert cfg.timing.bt_settle_short_ms == raw["timing"]["bt_settle_short_ms"]
+  assert cfg.timing.evdev_drain_max_events == raw["timing"]["evdev_drain_max_events"]
   assert cfg.camera.display_interval_ms == max(1, int(1000 / cfg.camera.display_fps))
   print("ok: AppConfig fields match config.json")
 

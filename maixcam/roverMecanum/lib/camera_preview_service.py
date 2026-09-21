@@ -156,14 +156,14 @@ class CameraPreviewService:
     try:
       if self._preview is not None:
         del self._preview
-    except Exception:
-      pass
+    except Exception as release_error:
+      print(f"camera: preview release failed: {release_error}")
     self._preview = None
     try:
       if self._cam is not None:
         del self._cam
-    except Exception:
-      pass
+    except Exception as release_error:
+      print(f"camera: camera release failed: {release_error}")
     self._cam = None
     gc.collect()
     print("camera: released")

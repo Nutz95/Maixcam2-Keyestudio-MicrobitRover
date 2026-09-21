@@ -30,6 +30,7 @@
     "speed_debounce_ms": 160,
     "evdev_retry_ms": 250,
     "evdev_open_attempts": 8,
+    "evdev_drain_max_events": 24,
     "hid_wait_ms": 12000,
     "hid_quick_wait_ms": 5000,
     "camera_ready_timeout_ms": 8000,
@@ -37,7 +38,16 @@
     "camera_paused_poll_ms": 40,
     "camera_frame_yield_ms": 1,
     "camera_no_frame_sleep_ms": 5,
-    "camera_stop_join_ms": 2500
+    "camera_stop_join_ms": 2500,
+    "bt_settle_short_ms": 400,
+    "bt_settle_medium_ms": 500,
+    "bt_settle_long_ms": 2000,
+    "bt_poll_ms": 100,
+    "bt_scan_poll_ms": 200,
+    "bt_devices_query_ms": 600,
+    "bt_pair_timeout_s": 25,
+    "bt_connect_timeout_s": 12,
+    "bt_remove_timeout_s": 8
   },
   "mapping": {
     "axes": {

@@ -17,10 +17,10 @@ class XboxInputService:
 
   def __init__(self, config_store):
     self._config_store = config_store
-    self._cfg = config_store.settings()
+    self._app_config = config_store.settings()
     self._pairing = BluetoothPairingService(config_store)
     self._finder = EvdevDeviceFinder()
-    self._mapper = ControllerMappingEngine(self._cfg.raw)
+    self._mapper = ControllerMappingEngine(self._app_config.raw)
     self._log_drive_mapping()
     self._lock = threading.Lock()
     self.state = ControllerState()
@@ -41,11 +41,11 @@ class XboxInputService:
 
   def apply_config(self, cfg: AppConfig):
     """Refresh cached settings + mapping (called after throttled config reload)."""
-    self._cfg = cfg
+    self._app_config = cfg
     self._mapper.update_config(cfg.raw)
 
   def _log_drive_mapping(self):
-    axes = self._cfg.mapping.get("axes", {})
+    axes = self._app_config.mapping.get("axes", {})
     print(
       "drive mapping:"
       f" forward={axes.get('drive_forward', 'left_y')}"
@@ -213,7 +213,9 @@ class XboxInputService:
         print("input: event node unusable — trying BlueZ connect")
 
       self._set_status("Waiting Xbox (agent on)...", 0.4)
-      ev_path = self._wait_for_input(timeout_ms=self._cfg.timing.hid_quick_wait_ms)
+      ev_path = self._wait_for_input(
+        timeout_ms=self._app_config.timing.hid_quick_wait_ms,
+      )
       if ev_path:
         handed_off = self._open_evdev(ev_path)
         if handed_off:
@@ -266,7 +268,9 @@ class XboxInputService:
     """Wait for and open the Xbox evdev node without disconnecting it."""
     if self._stop.is_set():
       return False
-    ev_path = self._wait_for_input(timeout_ms=self._cfg.timing.hid_wait_ms)
+    ev_path = self._wait_for_input(
+      timeout_ms=self._app_config.timing.hid_wait_ms,
+    )
     if ev_path and self._open_evdev(ev_path):
       return True
     self._set_status("Xbox input unavailable", 0.0)
@@ -276,7 +280,7 @@ class XboxInputService:
     """Wait until /dev/input/event* for the Xbox can be opened."""
     self._set_status("Waiting Xbox input...")
     deadline = time.ticks_ms() + timeout_ms
-    retry_s = self._cfg.timing.evdev_retry_ms / 1000.0
+    retry_s = self._app_config.timing.evdev_retry_ms / 1000.0
     while time.ticks_ms() < deadline and not self._stop.is_set():
       ev_path = self._finder.find_xbox_event()
       if ev_path and self._can_open(ev_path):
@@ -296,8 +300,8 @@ class XboxInputService:
 
   def _open_evdev(self, ev_path):
     reader = None
-    attempts = self._cfg.timing.evdev_open_attempts
-    retry_s = self._cfg.timing.evdev_retry_ms / 1000.0
+    attempts = self._app_config.timing.evdev_open_attempts
+    retry_s = self._app_config.timing.evdev_retry_ms / 1000.0
     for attempt in range(attempts):
       if self._stop.is_set():
         return False
@@ -307,7 +311,7 @@ class XboxInputService:
         ev_path = self._finder.find_xbox_event() or ev_path
         continue
       try:
-        reader = EvdevReader(ev_path, self._cfg.raw)
+        reader = EvdevReader(ev_path, self._app_config.raw)
         reader.open()
         break
       except OSError as io_error:
