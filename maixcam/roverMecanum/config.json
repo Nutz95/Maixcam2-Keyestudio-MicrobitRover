@@ -98,7 +98,6 @@
     "target_height_ratio": 0.22,
     "target_tolerance_ratio": 0.07,
     "too_close_height_ratio": 0.40,
-    "far_center_y_ratio": 0.28,
     "too_close_center_y_ratio": 0.72,
     "image_center_x_ratio": 0.5,
     "min_distance_error": 0.04,
@@ -119,9 +118,7 @@
     "search_retreat_ms": 700,
     "search_retreat_axis": 4500,
     "horizontal_deadzone": 0.15,
-    "lost_stop_ms": 500,
     "lost_search_ms": 2000,
-    "prediction_ms": 0,
     "trajectory_max_points": 24,
     "forward_axis_sign": -1,
     "spin_axis_sign": 1

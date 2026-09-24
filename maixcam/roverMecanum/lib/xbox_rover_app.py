@@ -6,6 +6,7 @@ from lib.ball_follow_controller import BallFollowController
 from lib.bluetooth_installer import BluetoothInstaller
 from lib.camera_preview_service import CameraPreviewService
 from lib.config_store import ConfigStore
+from lib.drive_dispatcher import DriveDispatcher
 from lib.imu_yaw_service import ImuYawService
 from lib.rover_uart_client import RoverUartClient
 from lib.teleop_control_thread import TeleopControlThread
@@ -61,6 +62,12 @@ class XboxRoverApp:
     self._last_speed_change_ms = 0
     self._last_config_tick_ms = 0
     self._rover.set_max_speed(self._session_max_speed)
+    self._drive = DriveDispatcher(
+      rover=self._rover,
+      ball_follow=self._ball_follow,
+      imu=self._imu,
+      get_frame=self._ball_frame,
+    )
     self._control = TeleopControlThread(
       xbox=self._xbox,
       rover=self._rover,
@@ -281,7 +288,7 @@ class XboxRoverApp:
       app.set_exit_flag(True)
       return
 
-    if self._in_rect(x, y, self._ui.gyro_top_rect()):
+    if self._in_rect(x, y, self._ui.gyro_rect()):
       self._start_gyro_calib()
       return
 
@@ -295,40 +302,16 @@ class XboxRoverApp:
     if snap.connected and self._in_rect(x, y, self._ui.disconnect_rect()):
       self._xbox.request_stop()
       self._rover.send_stop()
-      return
 
-    if snap.connected and self._in_rect(x, y, self._ui.gyro_rect()):
-      self._start_gyro_calib()
+  def _ball_frame(self):
+    if self._camera is not None and self._camera.ready:
+      return self._camera.get_frame()
+    return None
 
   def _send_drive(self, drive):
     """UART joystick/preset to micro:bit (protocol unchanged)."""
-    imu_snap = self._imu.snapshot()
-    if imu_snap.calibrating:
-      self._rover.send_stop()
-      return
-    if self._ball_follow.enabled:
-      frame = None
-      if self._camera is not None and self._camera.ready:
-        frame = self._camera.get_frame()
-      yaw_deg = imu_snap.yaw_deg if imu_snap.ready else None
-      command = self._ball_follow.update(frame, yaw_deg=yaw_deg)
-      self._rover.send_joystick(0, command.forward, command.spin, 0)
-      return
-    if self._manual_resume_pending:
-      self._rover.send_stop()
-      self._manual_resume_pending = False
-      return
-    if drive.preset_cmd is not None:
-      self._rover.send_preset(drive.preset_cmd)
-      return
-    if drive.is_idle():
-      self._rover.send_stop()
-      return
-    self._rover.send_joystick(
-      drive.axis_strafe,
-      drive.axis_forward,
-      drive.axis_spin,
-      drive.axis_pivot,
+    self._manual_resume_pending = self._drive.dispatch(
+      drive, self._manual_resume_pending,
     )
 
   def _in_rect(self, x, y, rect):

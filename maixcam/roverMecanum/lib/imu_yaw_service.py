@@ -1,6 +1,5 @@
 """Background IMU yaw publisher with MaixPy gyro calibration."""
 
-import math
 import threading
 from types import SimpleNamespace
 
@@ -27,7 +26,6 @@ class ImuYawService:
     self._calibrated = False
     self._calibrating = False
     self._yaw_deg = None
-    self._gyro_z_dps = None
     self._status = "off"
     self._calib_started_ms = None
     self._calib_duration_ms = 0
@@ -59,7 +57,6 @@ class ImuYawService:
     with self._lock:
       self._ready = False
       self._yaw_deg = None
-      self._gyro_z_dps = None
       self._calibrating = False
       self._calib_started_ms = None
       self._status = "stopped"
@@ -96,7 +93,6 @@ class ImuYawService:
         calibrated=self._calibrated,
         calibrating=self._calibrating,
         yaw_deg=self._yaw_deg,
-        gyro_z_dps=self._gyro_z_dps,
         status=self._status,
         calib_progress=progress,
       )
@@ -170,7 +166,6 @@ class ImuYawService:
         )
         with self._lock:
           self._yaw_deg = float(angle.z)
-          self._gyro_z_dps = float(math.degrees(gyro.z))
           self._ready = self._calibrated and not self._calibrating
           if self._calibrated and not self._calibrating:
             self._status = "ok"

@@ -32,8 +32,8 @@ The first controller is intentionally sequential:
 
 Closed-loop control is intentional: every teleop tick runs detect → decide →
 UART. Oscillation is a gain/delay problem, not a reason to freeze motors while
-vision runs. Prediction defaults to `0` ms because predicting while the rover
-itself is spinning often adds lag and overshoot.
+vision runs. Image-x velocity is used only for spin damping and search exit
+direction — no forward prediction of blob position.
 
 Motor shaping differs from teleop: Xbox sticks use `rover.axis_curve` (usually
 `expo`, soft center). Ball-follow uses a **linear** visual error with a
@@ -124,8 +124,7 @@ projection.
 The MaixPy depth example currently demonstrates `get_depth_image()` rendering,
 not a numeric distance value for a selected pixel. ByteTrack is demonstrated
 for YOLO objects and would require an object-detector object conversion for
-blob candidates. The current bounded 80 ms prediction is therefore kept as the
-low-latency first step.
+blob candidates.
 
 The MaixPy IMU path is wired through `ImuYawService` for gyro bias calibration
 and yaw-closed search turns. Visual horizontal error remains the primary
@@ -151,8 +150,7 @@ stop transitions.
 - metric distance from the 35 mm diameter and calibrated camera model;
 - depth-model comparison or a second NPU model;
 - IMU-assisted yaw-rate limiting and visual/IMU fusion;
-- short-term trajectory prediction beyond the current bounded 80 ms blob
-  prediction;
+- short-term blob trajectory prediction if lag becomes a problem;
 - a physical impact sensor and emergency-stop input.
 
 These extensions should be added only after the blob controller is stable on

@@ -24,6 +24,7 @@ files:
   - lib\ball_detector.py
   - lib\ball_follow_command.py
   - lib\ball_follow_controller.py
+  - lib\ball_follow_hud.py
   - lib\ball_follow_policy.py
   - lib\ball_follow_settings.py
   - lib\ball_follow_snapshot.py
@@ -42,6 +43,7 @@ files:
   - lib\controller_scan_result.py
   - lib\controller_state.py
   - lib\dpad_axes.py
+  - lib\drive_dispatcher.py
   - lib\drive_output.py
   - lib\evdev_axis_mapper.py
   - lib\evdev_constants.py
@@ -52,6 +54,7 @@ files:
   - lib\evdev_sysfs_reader.py
   - lib\evdev_trigger_mapper.py
   - lib\evdev_xbox_layout.py
+  - lib\gyro_calib_overlay.py
   - lib\imu_snapshot.py
   - lib\imu_yaw_service.py
   - lib\paths.py

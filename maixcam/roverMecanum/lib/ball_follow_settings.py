@@ -23,7 +23,6 @@ class BallFollowSettings:
     "target_height_ratio",
     "target_tolerance_ratio",
     "too_close_height_ratio",
-    "far_center_y_ratio",
     "too_close_center_y_ratio",
     "min_distance_error",
     "exit_velocity_threshold",
@@ -44,7 +43,6 @@ class BallFollowSettings:
     "search_retreat_axis",
     "horizontal_deadzone",
     "lost_search_ms",
-    "prediction_ms",
     "trajectory_max_points",
     "forward_axis_sign",
     "spin_axis_sign",
@@ -69,7 +67,6 @@ class BallFollowSettings:
     self.too_close_height_ratio = self._ratio(
       follow, "too_close_height_ratio", 0.40,
     )
-    self.far_center_y_ratio = self._ratio(follow, "far_center_y_ratio", 0.28)
     self.too_close_center_y_ratio = self._ratio(
       follow, "too_close_center_y_ratio", 0.72,
     )
@@ -83,7 +80,6 @@ class BallFollowSettings:
     self.spin_gain = max(1.0, as_float(follow, "spin_gain", 14000.0))
     self.spin_damping = max(0.0, as_float(follow, "spin_damping", 2800.0))
     self.forward_gain = max(1.0, as_float(follow, "forward_gain", 30000.0))
-    # Vision uses linear+floor shaping (not joystick expo). Floor clears motor breakaway.
     self.max_spin_axis = max(1, min(32767, as_int(follow, "max_spin_axis", 9000)))
     self.min_spin_axis = max(
       1, min(self.max_spin_axis, as_int(follow, "min_spin_axis", 6500)),
@@ -97,24 +93,18 @@ class BallFollowSettings:
     self.max_retreat_axis = max(
       1, min(self.max_forward_axis, as_int(follow, "max_retreat_axis", 6500)),
     )
-    # Search spin clears breakaway; prefer yaw-closed turn when IMU is ready.
     self.search_spin_axis = max(
       1, min(32767, as_int(follow, "search_spin_axis", 8000)),
     )
     self.search_turn_ms = max(500, as_int(follow, "search_turn_ms", 2200))
-    # Slightly under 360° so search stops before a full wrap overshoots.
     self.search_turn_deg = max(0.0, min(720.0, as_float(follow, "search_turn_deg", 350.0)))
     self.search_pause_ms = max(0, as_int(follow, "search_pause_ms", 800))
     self.search_retreat_ms = max(200, as_int(follow, "search_retreat_ms", 700))
     self.search_retreat_axis = max(
       1, min(self.max_retreat_axis, as_int(follow, "search_retreat_axis", 4500)),
     )
-    self.horizontal_deadzone = self._ratio(
-      follow, "horizontal_deadzone", 0.15,
-    )
+    self.horizontal_deadzone = self._ratio(follow, "horizontal_deadzone", 0.15)
     self.lost_search_ms = max(500, as_int(follow, "lost_search_ms", 2000))
-    # Prediction amplifies oscillation while the robot itself is spinning; default off.
-    self.prediction_ms = max(0, min(250, as_int(follow, "prediction_ms", 0)))
     self.trajectory_max_points = max(
       4, min(64, as_int(follow, "trajectory_max_points", 24)),
     )
@@ -182,7 +172,6 @@ class BallFollowSettings:
       if not isinstance(candidate, list) or len(candidate) != 6:
         continue
       try:
-        # MaixPy find_blobs requires List[List[int]], not floats.
         thresholds.append([int(round(float(item))) for item in candidate])
       except (TypeError, ValueError) as threshold_error:
         print(f"ball config: invalid LAB threshold ignored: {threshold_error}")
